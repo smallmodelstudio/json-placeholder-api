@@ -1,3 +1,4 @@
+import { CacheTTL } from '@nestjs/cache-manager';
 import {
   Body,
   Controller,
@@ -27,6 +28,9 @@ export class PostsController {
   }
 
   @Get(':id')
+  // Longer than the global cache default: a single post by id is far less
+  // likely to need a fresh look than a filterable list query.
+  @CacheTTL(60_000)
   findOne(@Param('id', ParsePositiveIntPipe) id: number): Promise<Post> {
     return this.postsService.findOne(id);
   }

@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-**Phase 6: Production hardening** (Next)
+**Phase 7: Documentation & polish** (Next)
 
 ## Completed Phases
 
@@ -123,6 +123,28 @@
   * Clean `npm run build` and `npm run lint` (0 errors; same pre-existing `supertest`/`App` `no-unsafe-argument` warnings as prior phases, now duplicated across the additional e2e spec files).
   * Live-verified against the real `jsonplaceholder.typicode.com` (`npm run start`, `curl`'d, killed after): all five nested-route endpoints return real filtered data; `POST /users` with a full nested address/company payload succeeds and echoes a new `id`; the same payload with `address` omitted returns the expected 400 with `"address must be a non-empty object"`; `DELETE /albums/1` returns `200 {}`.
 
+### [x] Phase 6: Production hardening
+
+* **Dependencies:** Installed `@nestjs/cache-manager` (`^3.1.3`) + `cache-manager` (`^7.2.9`, brings its own default in-memory Keyv store — no separate `keyv` dependency or explicit `stores` option needed), `@nestjs/throttler` (`^6.5.0`), `@nestjs/terminus` (`^11.1.1`).
+* **Config:** `AppConfig` gains `cache: { ttlMs }` and `throttle: { ttlMs, limit }`, validated in `env.validation.ts` and sourced from new env vars `CACHE_TTL_MS` (default 30000), `THROTTLE_TTL_MS` (default 60000), `THROTTLE_LIMIT` (default 20) — same `configuration.ts` factory pattern as the existing `http` block.
+* **`CacheModule`** (`@nestjs/cache-manager`), registered globally via `CacheModule.registerAsync` in `AppModule` with the default TTL from config:
+  * **`HttpCacheInterceptor`** (`src/common/interceptors/http-cache.interceptor.ts`) — subclasses the library's `CacheInterceptor` and overrides `trackBy()` to return `undefined` (never cache) for any `/health` path; everything else falls through to the default GET-and-request-URL cache key. Bound globally as `APP_INTERCEPTOR`. This is the standard Nest-documented pattern for customizing cache-key behavior — no need to touch the constructor, DI on `cacheManager`/`reflector`/`httpAdapterHost` is inherited from the base class.
+  * **Interceptor order updated to `[Logging, Transform, Cache, Timeout]`** (was `[Logging, Transform, Timeout]`): Cache sits between Transform and Timeout so that on a cache hit, Transform still runs and wraps the cached raw data in a *fresh* envelope (new `timestamp`/`correlationId` per response — confirmed live), while Timeout and the real handler (and thus the real upstream call) are skipped entirely. `CacheInterceptor` itself only ever intercepts GET requests (checked internally via `isRequestCacheable`), so writes are unaffected without any extra code.
+  * **Per-route TTL override, demonstrated on `PostsController.findOne`:** `@CacheTTL(60_000)` (vs. the global 30s default) — a single post by id is far less likely to need a fresh look than a filterable list query. Not replicated across all six resources' `:id` routes: the mechanism is identical everywhere via the global interceptor, and mechanically repeating the same override six times would be low-value duplication rather than genuine per-route reasoning.
+  * Confirmed live via `curl -D-`: `CacheInterceptor` sets an `X-Cache: MISS`/`X-Cache: HIT` response header automatically — first `GET /posts/1` returned `MISS`, immediate second returned `HIT` with the same `data` but a different `correlationId`/`timestamp`.
+* **`ThrottlerModule`** global guard — first Guard in the project. `ThrottlerModule.forRootAsync` configured from `throttle.ttlMs`/`throttle.limit`; `ThrottlerGuard` bound globally as `APP_GUARD`. **`@SkipThrottle()`** on `HealthController` — infra liveness/readiness probes must never be rate-limited. Confirmed live: request 21 and 22 to `/posts` within the default 20-req/60s window returned `429`, while `/health` kept returning `200` throughout.
+* **`HealthModule`** (`src/health/`) — `@nestjs/terminus`, at `GET /health`:
+  * `HealthController` uses `HealthCheckService` + `HttpHealthIndicator.pingCheck('upstream', ...)` against `{http.baseUrl}/posts/1` (JSONPlaceholder has no dedicated ping endpoint; a small, always-present resource stands in for one).
+  * `HealthModule` imports its own `HttpModule.registerAsync` (reusing `http.timeoutMs` from config) rather than relying on `HttpHealthIndicator`'s `moduleRef.get(HttpService, {strict:false})` cross-module fallback lookup, which would have implicitly (and confusingly) reused `UpstreamModule`'s axios instance — an explicit, self-contained module dependency was judged clearer than leaning on that fallback.
+  * On success: flows through the normal global interceptor stack like every other route, so the terminus result shape (`{status, info, error, details}`) ends up nested under our own `{data, meta}` envelope — no special-casing, consistent with the rest of the API. Confirmed live against the real upstream: `{"data":{"status":"ok","info":{"upstream":{"status":"up"}},...}}`.
+  * On failure: `HealthCheckService.check()` throws `ServiceUnavailableException(result)` (503), caught by the existing `AllExceptionsFilter`. **Known envelope quirk, accepted rather than special-cased:** the filter's `resolveHttpException` expects a `{message?, error?}` body shape; terminus's body has no `message` key (falls back to the generic exception message) and its `error` key is an object (per-indicator failure details), not the short string the rest of the app's error envelope normally carries there. Functionally harmless (still serializes fine, still a 503), just not as tightly typed as other error responses — not worth a terminus-specific branch in the filter for this project's scope.
+* **Graceful shutdown:** `main.ts` calls `app.enableShutdownHooks()`. `AppModule` implements `OnApplicationShutdown`, logging the received signal. This isn't just a logging nicety — enabling shutdown hooks is what lets Terminus's internal `HealthCheckExecutor` (which implements `beforeApplicationShutdown`) mark the app `shutting_down` during the shutdown window, so `/health` can reflect that state if polled during a real deploy. Confirmed live: `kill -TERM` on the running process logged `[AppModule] Shutting down (signal: SIGTERM)` and the process exited with no dangling port/handle.
+* **Testing & Verification:**
+  * Unit tests: `http-cache.interceptor.spec.ts` (trackBy excludes `/health`, falls back to the default URL key otherwise — protected method exercised via a typed cast, base class's `httpAdapterHost` faked since it's normally property-injected by Nest), `health.controller.spec.ts` (call-contract: `check()` invokes `HealthCheckService.check` with an indicator that pings the configured base URL) — 170/170 unit tests passing across the project (up from 167).
+  * E2E: `test/cache.e2e-spec.ts` (new — second `GET /posts` and second `GET /posts/:id` within the TTL served from cache without a second nock mock being registered; cache keys differentiated per query string; writes proven never cached via `scope.isDone()`), `test/throttle.e2e-spec.ts` (new — 429 after the configured limit via `withEnvOverrides`; `/health` exempt even at `limit: 1`), `test/health.e2e-spec.ts` (new — 200/`status: ok` on a healthy upstream ping, 503 on a failing one) — 85/85 e2e tests passing (up from 77). Confirmed beforehand that no existing e2e test issues more than one HTTP request per `it()` block, so introducing a global per-IP rate limit (fresh `ThrottlerStorage` per test, since `createTestApp()` recompiles the whole module per test) couldn't have broken any pre-existing test.
+  * Clean `npm run build` and `npm run lint` (0 errors; same pre-existing `supertest`/`App` `no-unsafe-argument` warnings as prior phases).
+  * Live-verified against the real `jsonplaceholder.typicode.com` (`npm run start`, `curl`'d, signaled, killed after): `/health` healthy response, `X-Cache: MISS`→`HIT` on repeated `GET /posts/1` with a fresh envelope each time, `429` after 20 requests to `/posts` within 60s with `/health` unaffected, and clean `SIGTERM` shutdown logging — see above for each.
+
 ## Active Context & Architectural Decisions
 
 * **Path Aliases Dropped:** Decided against `tsconfig` path aliases (`@common/*`, etc.) to prevent build pipeline fragility with Nest CLI's standard `tsc` compiler. Using clean relative imports instead.
@@ -136,10 +158,12 @@
 
 ## Next Immediate Task
 
-Implement **Phase 6 (Production hardening)**:
+Implement **Phase 7 (Documentation & polish)**:
 
-* `CacheModule` (`@nestjs/cache-manager`) with a per-route TTL — genuinely justified here since upstream JSONPlaceholder data is static; add cache-hit tests (assert a second request within the TTL doesn't re-hit the nocked upstream).
-* `ThrottlerModule` global guard to protect the upstream from being hammered — first Guard in the project.
-* `@nestjs/terminus` health check at `/health` using `HttpHealthIndicator` pinging JSONPlaceholder.
-* Graceful shutdown hooks.
-* Full API surface is now in place (Posts, Users, Comments, Todos, Albums, Photos, all five nested routes) — Phase 6 is about behavior under load, not new resources. Phase 7 (Swagger/docs/polish, contract tests, coverage review) still follows after.
+* Swagger via `@nestjs/swagger`, with the CLI plugin enabled in `nest-cli.json` so DTO/entity metadata is auto-inferred rather than hand-decorated everywhere.
+* `@ApiTags`/`@ApiResponse` (and friends) across the six resource controllers; a composed custom decorator (`api-paginated-response.decorator.ts` per PLAN.md) if a genuinely repeated shape justifies it.
+* Docs served at `/docs`.
+* README architecture notes (the project has accumulated a lot of "why" in this file — worth surfacing the key decisions there too).
+* Contract test suite (`RUN_CONTRACT_TESTS=1`, opt-in, hits the real `jsonplaceholder.typicode.com` to catch upstream drift) — currently the project only has ad hoc live-`curl` verification per phase, no persisted contract tests.
+* Coverage review — not chasing 100%, per PLAN.md's own testing strategy; focus on `upstream/` and `common/` if anything looks thin.
+* Full API surface, cross-cutting concerns, and production hardening (caching, rate limiting, health checks, graceful shutdown) are all in place — Phase 7 is the last planned phase.

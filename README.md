@@ -29,6 +29,12 @@ A [NestJS](https://nestjs.com/) proxy API in front of [JSONPlaceholder](https://
 
 `POST`/`PUT`/`PATCH`/`DELETE` on `/posts` are fully implemented and proxy straight through to JSONPlaceholder, but **JSONPlaceholder fakes persistence**: it returns a plausible response (e.g. a new `id` on create) without actually storing anything server-side. A `GET` immediately after a write will not reflect the change. This is upstream behavior, not a bug in this proxy.
 
+### Production hardening
+
+- **Caching:** GET responses are cached in-memory (`CACHE_TTL_MS`, default 30s) — check the `X-Cache: HIT`/`MISS` response header. `/health` is always excluded.
+- **Rate limiting:** requests are capped per IP (`THROTTLE_LIMIT` per `THROTTLE_TTL_MS`, default 20 per 60s); exceeding it returns `429`. `/health` is exempt so infra probes are never throttled.
+- **Health check:** `GET /health` pings JSONPlaceholder and returns `503` if it's unreachable — point liveness/readiness probes here.
+
 ## Project setup
 
 ```bash

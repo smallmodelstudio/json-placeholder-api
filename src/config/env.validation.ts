@@ -27,6 +27,18 @@ class EnvironmentVariables {
   @IsInt()
   @Min(0)
   UPSTREAM_MAX_RETRIES: number = 2;
+
+  @IsInt()
+  @Min(0)
+  CACHE_TTL_MS: number = 30000;
+
+  @IsInt()
+  @Min(1)
+  THROTTLE_TTL_MS: number = 60000;
+
+  @IsInt()
+  @Min(1)
+  THROTTLE_LIMIT: number = 20;
 }
 
 export function validate(

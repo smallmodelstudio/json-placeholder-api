@@ -6,4 +6,11 @@ export interface AppConfig {
     timeoutMs: number;
     maxRetries: number;
   };
+  cache: {
+    ttlMs: number;
+  };
+  throttle: {
+    ttlMs: number;
+    limit: number;
+  };
 }
