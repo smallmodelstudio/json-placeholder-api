@@ -9,6 +9,11 @@ import {
   Put,
   Query,
 } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
+import {
+  ApiEnvelopedEmptyResponse,
+  ApiEnvelopedResponse,
+} from '../../common/decorators/api-envelope-response.decorator';
 import { ParsePositiveIntPipe } from '../../common/pipes/parse-positive-int.pipe';
 import { Photo } from '../photos/entities/photo.entity';
 import { AlbumsService } from './albums.service';
@@ -17,26 +22,31 @@ import { QueryAlbumsDto } from './dto/query-albums.dto';
 import { UpdateAlbumDto } from './dto/update-album.dto';
 import { Album } from './entities/album.entity';
 
+@ApiTags('albums')
 @Controller('albums')
 export class AlbumsController {
   constructor(private readonly albumsService: AlbumsService) {}
 
   @Get()
+  @ApiEnvelopedResponse(Album, { isArray: true })
   findAll(@Query() query: QueryAlbumsDto): Promise<Album[]> {
     return this.albumsService.findAll(query);
   }
 
   @Get(':id')
+  @ApiEnvelopedResponse(Album)
   findOne(@Param('id', ParsePositiveIntPipe) id: number): Promise<Album> {
     return this.albumsService.findOne(id);
   }
 
   @Post()
+  @ApiEnvelopedResponse(Album, { status: 201 })
   create(@Body() dto: CreateAlbumDto): Promise<Album> {
     return this.albumsService.create(dto);
   }
 
   @Put(':id')
+  @ApiEnvelopedResponse(Album)
   update(
     @Param('id', ParsePositiveIntPipe) id: number,
     @Body() dto: UpdateAlbumDto,
@@ -45,6 +55,7 @@ export class AlbumsController {
   }
 
   @Patch(':id')
+  @ApiEnvelopedResponse(Album)
   patch(
     @Param('id', ParsePositiveIntPipe) id: number,
     @Body() dto: UpdateAlbumDto,
@@ -53,11 +64,15 @@ export class AlbumsController {
   }
 
   @Delete(':id')
+  @ApiEnvelopedEmptyResponse(
+    'Album deleted (JSONPlaceholder does not persist deletes)',
+  )
   remove(@Param('id', ParsePositiveIntPipe) id: number): Promise<object> {
     return this.albumsService.remove(id);
   }
 
   @Get(':id/photos')
+  @ApiEnvelopedResponse(Photo, { isArray: true })
   findPhotos(@Param('id', ParsePositiveIntPipe) id: number): Promise<Photo[]> {
     return this.albumsService.findPhotos(id);
   }

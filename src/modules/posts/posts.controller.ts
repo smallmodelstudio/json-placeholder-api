@@ -10,6 +10,11 @@ import {
   Put,
   Query,
 } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
+import {
+  ApiEnvelopedEmptyResponse,
+  ApiEnvelopedResponse,
+} from '../../common/decorators/api-envelope-response.decorator';
 import { ParsePositiveIntPipe } from '../../common/pipes/parse-positive-int.pipe';
 import { Comment } from '../comments/entities/comment.entity';
 import { CreatePostDto } from './dto/create-post.dto';
@@ -18,11 +23,13 @@ import { UpdatePostDto } from './dto/update-post.dto';
 import { Post } from './entities/post.entity';
 import { PostsService } from './posts.service';
 
+@ApiTags('posts')
 @Controller('posts')
 export class PostsController {
   constructor(private readonly postsService: PostsService) {}
 
   @Get()
+  @ApiEnvelopedResponse(Post, { isArray: true })
   findAll(@Query() query: QueryPostsDto): Promise<Post[]> {
     return this.postsService.findAll(query);
   }
@@ -31,16 +38,19 @@ export class PostsController {
   // Longer than the global cache default: a single post by id is far less
   // likely to need a fresh look than a filterable list query.
   @CacheTTL(60_000)
+  @ApiEnvelopedResponse(Post)
   findOne(@Param('id', ParsePositiveIntPipe) id: number): Promise<Post> {
     return this.postsService.findOne(id);
   }
 
   @HttpPost()
+  @ApiEnvelopedResponse(Post, { status: 201 })
   create(@Body() dto: CreatePostDto): Promise<Post> {
     return this.postsService.create(dto);
   }
 
   @Put(':id')
+  @ApiEnvelopedResponse(Post)
   update(
     @Param('id', ParsePositiveIntPipe) id: number,
     @Body() dto: UpdatePostDto,
@@ -49,6 +59,7 @@ export class PostsController {
   }
 
   @Patch(':id')
+  @ApiEnvelopedResponse(Post)
   patch(
     @Param('id', ParsePositiveIntPipe) id: number,
     @Body() dto: UpdatePostDto,
@@ -57,11 +68,15 @@ export class PostsController {
   }
 
   @Delete(':id')
+  @ApiEnvelopedEmptyResponse(
+    'Post deleted (JSONPlaceholder does not persist deletes)',
+  )
   remove(@Param('id', ParsePositiveIntPipe) id: number): Promise<object> {
     return this.postsService.remove(id);
   }
 
   @Get(':id/comments')
+  @ApiEnvelopedResponse(Comment, { isArray: true })
   findComments(
     @Param('id', ParsePositiveIntPipe) id: number,
   ): Promise<Comment[]> {

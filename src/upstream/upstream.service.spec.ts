@@ -98,6 +98,44 @@ describe('UpstreamService', () => {
     );
   });
 
+  it('sends a PUT with the request body', async () => {
+    httpService.request.mockReturnValueOnce(of(makeAxiosResponse({ id: 1 })));
+
+    await service.put('/posts/1', { title: 'replaced' });
+
+    expect(httpService.request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'PUT',
+        url: '/posts/1',
+        data: { title: 'replaced' },
+      }),
+    );
+  });
+
+  it('sends a PATCH with the request body', async () => {
+    httpService.request.mockReturnValueOnce(of(makeAxiosResponse({ id: 1 })));
+
+    await service.patch('/posts/1', { title: 'patched' });
+
+    expect(httpService.request).toHaveBeenCalledWith(
+      expect.objectContaining({
+        method: 'PATCH',
+        url: '/posts/1',
+        data: { title: 'patched' },
+      }),
+    );
+  });
+
+  it('sends a DELETE with no body', async () => {
+    httpService.request.mockReturnValueOnce(of(makeAxiosResponse({})));
+
+    await service.delete('/posts/1');
+
+    expect(httpService.request).toHaveBeenCalledWith(
+      expect.objectContaining({ method: 'DELETE', url: '/posts/1' }),
+    );
+  });
+
   it('retries a 5xx response and returns the eventual success', async () => {
     const serverError = makeAxiosError({
       response: { status: 503 } as AxiosResponse,

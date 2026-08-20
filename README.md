@@ -35,6 +35,22 @@ A [NestJS](https://nestjs.com/) proxy API in front of [JSONPlaceholder](https://
 - **Rate limiting:** requests are capped per IP (`THROTTLE_LIMIT` per `THROTTLE_TTL_MS`, default 20 per 60s); exceeding it returns `429`. `/health` is exempt so infra probes are never throttled.
 - **Health check:** `GET /health` pings JSONPlaceholder and returns `503` if it's unreachable — point liveness/readiness probes here.
 
+### API documentation
+
+Interactive Swagger UI is served at `/docs` (raw OpenAPI JSON at `/docs-json`) once the app is running. DTO and entity schemas are generated automatically by the `@nestjs/swagger` CLI plugin from their TypeScript types and existing `class-validator` decorators — they aren't hand-annotated. Every documented success response reflects the real `{ data, meta }` envelope (see `src/common/decorators/api-envelope-response.decorator.ts`), not the bare entity type, since that's what a client actually receives.
+
+## Architecture
+
+```text
+Controller → Service → UpstreamService (HttpService/axios) → jsonplaceholder.typicode.com
+```
+
+- **`UpstreamService`** (`src/upstream/`) is the single choke point for all outbound HTTP: typed `get/post/put/patch/delete`, retry with backoff on 5xx/network errors (never on 4xx), and axios-error → `UpstreamException` mapping. Feature services never touch `HttpService` directly.
+- **Six resource modules** (`src/modules/`) each follow the same shape — `entities/`, `dto/{query,create,update}-*.dto.ts`, service, controller — hand-written per resource rather than a generic base class, since premature generics tend to fight Nest's DI system at this scale. Nested routes (e.g. `/posts/:id/comments`) are owned by the parent resource's controller, delegating to the child resource's service.
+- **Cross-cutting concerns live in `AppModule`**, not `main.ts`: global `ValidationPipe`, `AllExceptionsFilter`, the `Logging`/`Transform`/`Cache`/`Timeout` interceptor chain, and `ThrottlerGuard` are all registered as `APP_*` providers. Both `main.ts` and the E2E test bootstrap (`test/support/create-test-app.ts`) just instantiate `AppModule`, so they can never drift out of sync with each other.
+- **Every success response** is wrapped `{ data, meta: { timestamp, correlationId } }`; **every error** — validation failures, upstream errors, unhandled exceptions — is normalized to `{ statusCode, message, error, path, timestamp, correlationId }` by a single `AllExceptionsFilter`.
+- Full rationale and phase-by-phase decisions are logged in `PROGRESS.md` as they were made — it's the fuller design record behind the summary above.
+
 ## Project setup
 
 ```bash
@@ -60,11 +76,15 @@ $ npm run start:prod
 # unit tests
 $ npm run test
 
-# e2e tests
+# e2e tests (nocked upstream — never touches the real network)
 $ npm run test:e2e
 
 # test coverage
 $ npm run test:cov
+
+# contract tests — opt-in, hits the real jsonplaceholder.typicode.com to
+# catch upstream drift that the nock-based e2e fixtures can't
+$ npm run test:contract
 ```
 
 ## Deployment
