@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import configuration from './config/configuration';
 import { validate } from './config/env.validation';
+import { UpstreamModule } from './upstream/upstream.module';
 
 @Module({
   imports: [
@@ -10,6 +11,7 @@ import { validate } from './config/env.validation';
       load: [configuration],
       validate,
     }),
+    UpstreamModule,
   ],
   controllers: [],
   providers: [],
