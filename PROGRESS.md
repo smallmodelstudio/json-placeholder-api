@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-**Phase 2: First Vertical Slice (Posts, read-only)** (Next)
+**Phase 3: Cross-cutting concerns** (Next)
 
 ## Completed Phases
 
@@ -42,6 +42,23 @@
   * Full suite: 15/15 unit tests, 1/1 e2e test, clean `build` and `lint`.
   * Live-verified against the real `jsonplaceholder.typicode.com` (not just mocks) with a throwaway script: confirmed `GET /posts/1` passthrough and `GET /posts/999999` → `UpstreamException` with `upstreamStatus: 404`. Script deleted after verification — not part of the codebase.
 
+### [x] Phase 2: First Vertical Slice (Posts, read-only)
+
+* **`PostsModule`:** `src/modules/posts/` — imports `UpstreamModule`, wired into `AppModule`.
+* **Entity:** `src/modules/posts/entities/post.entity.ts` — plain class (`id`, `userId`, `title`, `body`) with definite-assignment (`!`) fields, since instances come from parsed upstream JSON rather than `new Post()` construction. No Swagger decorators yet — deferred to Phase 7.
+* **`QueryPostsDto`:** `src/modules/posts/dto/query-posts.dto.ts` — optional `userId` (`@IsOptional @Type(() => Number) @IsInt @IsPositive`), validated/transformed by a **route-scoped** `new ValidationPipe({ transform: true, whitelist: true })` on `@Query()` in the controller. There is no global `ValidationPipe` yet (that's Phase 3), so this pipe instance is deliberately local to `PostsController#findAll` for now; it can likely be removed once the global pipe lands, since a global `ValidationPipe` would cover the same DTO.
+* **`ParsePositiveIntPipe`:** `src/common/pipes/parse-positive-int.pipe.ts` — hand-written custom pipe (learning goal, per plan) for the `:id` param; rejects non-integers, zero, and negatives with a `BadRequestException`. Handled natively by Nest's default exception filter (no custom filter exists yet), so it already returns a proper 400 JSON body.
+* **`PostsController` / `PostsService`:** `GET /posts` (optionally filtered by `?userId=`, passed through to upstream as a query param) and `GET /posts/:id`. Service is a thin passthrough to `UpstreamService.get()` — no error handling in the service itself, since `UpstreamException` mapping to HTTP responses is explicitly deferred to the Phase 3 exception filter. Right now an upstream 404/500 surfaces as an unhandled `UpstreamException` → Nest's default filter → 500, which is expected/known until Phase 3.
+* **Test support pattern (for all future E2E specs):**
+  * `test/support/create-test-app.ts` — shared `createTestApp()` bootstrap (mirrors `main.ts`; will matter once Phase 3 adds global pipes/filters). `test/app.e2e-spec.ts` refactored to use it.
+  * `test/support/upstream-mock.ts` — `mockUpstream()` nock scope helper, bound to `UPSTREAM_BASE_URL`.
+  * `test/support/nock-setup.ts` — registered via `setupFilesAfterEnv` in `test/jest-e2e.json`; calls `nock.disableNetConnect()` then `nock.enableNetConnect('127.0.0.1')` so unmocked upstream calls fail loudly while supertest's own loopback traffic to the app still works (blocking `127.0.0.1` too was an early gotcha — it broke supertest itself, not just real upstream calls). `nock.cleanAll()` after each test.
+* **Testing & Verification:**
+  * Unit tests: `parse-positive-int.pipe.spec.ts`, `posts.service.spec.ts`, `posts.controller.spec.ts` — 30/30 total unit tests passing across the project.
+  * E2E tests (`test/posts.e2e-spec.ts`): happy path for `GET /posts`, `?userId=` passthrough, `GET /posts/:id`, plus 400s from both the query DTO and `ParsePositiveIntPipe` — 6/6 e2e tests passing.
+  * Clean `npm run build` and `npm run lint` (0 errors; pre-existing `no-unsafe-argument` warnings only, on `supertest`'s `App` type — consistent with the rest of the test suite).
+  * Installed `nock` as a dev dependency.
+
 ## Active Context & Architectural Decisions
 
 * **Path Aliases Dropped:** Decided against `tsconfig` path aliases (`@common/*`, etc.) to prevent build pipeline fragility with Nest CLI's standard `tsc` compiler. Using clean relative imports instead.
@@ -52,9 +69,10 @@
 
 ## Next Immediate Task
 
-Implement **Phase 2 (First Vertical Slice: Posts, read-only)**:
+Implement **Phase 3 (Cross-cutting concerns)**:
 
-* Build `PostsModule`, `PostsController`, `PostsService` for `GET /posts` and `GET /posts/:id`.
-* Add `Post` entity, `QueryPostsDto` (`?userId=`), and a custom `ParsePositiveIntPipe` for the `:id` param.
-* Unit tests for controller + service (service calls mocked `UpstreamService` with the right path/params).
-* First real E2E test using `nock` to mock the upstream HTTP call — the shape all later resource E2E tests will follow.
+* Global `ValidationPipe` (`whitelist`, `forbidNonWhitelisted`, `transform`, `enableImplicitConversion`) — once in place, decide whether to remove the route-scoped `ValidationPipe` in `PostsController#findAll` (see Phase 2 notes) since it would become redundant.
+* `AllExceptionsFilter` — catch-all producing a consistent error envelope (`statusCode`, `message`, `error`, `path`, `timestamp`, `correlationId`), and specifically translating `UpstreamException` → 502/504/etc. instead of leaking as a bare 500 (current behavior, see Phase 2 notes on `PostsService`).
+* Logging / transform / timeout interceptors, correlation-ID middleware.
+* Shared `createTestApp()` helper (`test/support/create-test-app.ts`, already scaffolded in Phase 2) should start reflecting real global providers as they're added.
+* Unit tests per component + E2E error-path tests (upstream 500 → 502, upstream timeout → 504, unknown route → 404 envelope, validation rejection → 400 with field errors).
