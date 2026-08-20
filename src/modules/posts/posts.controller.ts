@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, ValidationPipe } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 import { ParsePositiveIntPipe } from '../../common/pipes/parse-positive-int.pipe';
 import { QueryPostsDto } from './dto/query-posts.dto';
 import { Post } from './entities/post.entity';
@@ -9,10 +9,7 @@ export class PostsController {
   constructor(private readonly postsService: PostsService) {}
 
   @Get()
-  findAll(
-    @Query(new ValidationPipe({ transform: true, whitelist: true }))
-    query: QueryPostsDto,
-  ): Promise<Post[]> {
+  findAll(@Query() query: QueryPostsDto): Promise<Post[]> {
     return this.postsService.findAll(query);
   }
 

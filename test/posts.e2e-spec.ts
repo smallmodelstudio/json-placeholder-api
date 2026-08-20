@@ -1,6 +1,8 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
+import { Post } from '../src/modules/posts/entities/post.entity';
 import { createTestApp } from './support/create-test-app';
+import { SuccessEnvelope } from './support/response-envelope';
 import { mockUpstream } from './support/upstream-mock';
 
 describe('Posts (e2e)', () => {
@@ -26,7 +28,8 @@ describe('Posts (e2e)', () => {
         .get('/posts')
         .expect(200);
 
-      expect(response.body).toEqual(posts);
+      const body = response.body as SuccessEnvelope<Post[]>;
+      expect(body.data).toEqual(posts);
     });
 
     it('forwards ?userId= as an upstream query param', async () => {
@@ -37,7 +40,8 @@ describe('Posts (e2e)', () => {
         .get('/posts?userId=7')
         .expect(200);
 
-      expect(response.body).toEqual(posts);
+      const body = response.body as SuccessEnvelope<Post[]>;
+      expect(body.data).toEqual(posts);
     });
 
     it('rejects a non-numeric userId with 400', async () => {
@@ -54,7 +58,8 @@ describe('Posts (e2e)', () => {
         .get('/posts/1')
         .expect(200);
 
-      expect(response.body).toEqual(post);
+      const body = response.body as SuccessEnvelope<Post>;
+      expect(body.data).toEqual(post);
     });
 
     it('rejects a non-positive-integer id with 400', async () => {

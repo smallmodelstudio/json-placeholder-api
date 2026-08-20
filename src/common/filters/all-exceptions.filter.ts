@@ -1,0 +1,128 @@
+import {
+  ArgumentsHost,
+  Catch,
+  ExceptionFilter,
+  HttpException,
+  HttpStatus,
+  Logger,
+} from '@nestjs/common';
+import { Request, Response } from 'express';
+import { STATUS_CODES } from 'node:http';
+import {
+  UpstreamErrorType,
+  UpstreamException,
+} from '../exceptions/upstream.exception';
+
+interface ResolvedError {
+  statusCode: number;
+  message: string | string[];
+  error: string;
+}
+
+interface ErrorEnvelope extends ResolvedError {
+  path: string;
+  timestamp: string;
+  correlationId: string;
+}
+
+// Typed as `number` (not `HttpStatus`) so it can be compared against
+// `resolved.statusCode`, which is a plain number that isn't necessarily one
+// of the named HttpStatus members (e.g. a passed-through upstream 4xx).
+const SERVER_ERROR_THRESHOLD: number = HttpStatus.INTERNAL_SERVER_ERROR;
+
+@Catch()
+export class AllExceptionsFilter implements ExceptionFilter {
+  private readonly logger = new Logger('ExceptionFilter');
+
+  catch(exception: unknown, host: ArgumentsHost): void {
+    const ctx = host.switchToHttp();
+    const request = ctx.getRequest<Request>();
+    const response = ctx.getResponse<Response>();
+
+    const resolved = this.resolve(exception);
+
+    if (resolved.statusCode >= SERVER_ERROR_THRESHOLD) {
+      this.logger.error(
+        `${request.method} ${request.originalUrl} -> ${resolved.statusCode} [${request.correlationId}]`,
+        exception instanceof Error ? exception.stack : undefined,
+      );
+    }
+
+    const envelope: ErrorEnvelope = {
+      ...resolved,
+      path: request.originalUrl,
+      timestamp: new Date().toISOString(),
+      correlationId: request.correlationId,
+    };
+
+    response.status(resolved.statusCode).json(envelope);
+  }
+
+  private resolve(exception: unknown): ResolvedError {
+    if (exception instanceof UpstreamException) {
+      return this.resolveUpstreamException(exception);
+    }
+
+    if (exception instanceof HttpException) {
+      return this.resolveHttpException(exception);
+    }
+
+    return {
+      statusCode: HttpStatus.INTERNAL_SERVER_ERROR,
+      message: 'Internal server error',
+      error: 'Internal Server Error',
+    };
+  }
+
+  private resolveUpstreamException(
+    exception: UpstreamException,
+  ): ResolvedError {
+    if (exception.type === UpstreamErrorType.TIMEOUT) {
+      return {
+        statusCode: HttpStatus.GATEWAY_TIMEOUT,
+        message: 'Upstream request timed out',
+        error: 'Gateway Timeout',
+      };
+    }
+
+    // A 4xx from upstream reflects something meaningful about the request
+    // itself (e.g. a post that doesn't exist), so it's passed through as-is.
+    // Anything else — a 5xx response, or no response at all — means the
+    // upstream failed us, which is a 502 regardless of the underlying cause.
+    if (
+      exception.upstreamStatus !== undefined &&
+      exception.upstreamStatus < 500
+    ) {
+      return {
+        statusCode: exception.upstreamStatus,
+        message: exception.message,
+        error: STATUS_CODES[exception.upstreamStatus] ?? 'Error',
+      };
+    }
+
+    return {
+      statusCode: HttpStatus.BAD_GATEWAY,
+      message: 'Upstream service returned an invalid response',
+      error: 'Bad Gateway',
+    };
+  }
+
+  private resolveHttpException(exception: HttpException): ResolvedError {
+    const statusCode = exception.getStatus();
+    const body = exception.getResponse();
+
+    if (typeof body === 'string') {
+      return { statusCode, message: body, error: exception.name };
+    }
+
+    const { message, error } = body as {
+      message?: string | string[];
+      error?: string;
+    };
+    return {
+      statusCode,
+      message: message ?? exception.message,
+      error: error ?? exception.name,
+    };
+  }
+}
