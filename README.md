@@ -23,7 +23,11 @@
 
 ## Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+A [NestJS](https://nestjs.com/) proxy API in front of [JSONPlaceholder](https://jsonplaceholder.typicode.com/), adding typed DTOs, validation, retries/timeouts, and a consistent response/error envelope.
+
+### A note on writes
+
+`POST`/`PUT`/`PATCH`/`DELETE` on `/posts` are fully implemented and proxy straight through to JSONPlaceholder, but **JSONPlaceholder fakes persistence**: it returns a plausible response (e.g. a new `id` on create) without actually storing anything server-side. A `GET` immediately after a write will not reflect the change. This is upstream behavior, not a bug in this proxy.
 
 ## Project setup
 

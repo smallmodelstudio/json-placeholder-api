@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-**Phase 4: Writes on Posts** (Next)
+**Phase 5: Remaining resources + nested routes** (Next)
 
 ## Completed Phases
 
@@ -83,6 +83,21 @@
   * Clean `npm run build` and `npm run lint` (0 errors). Fixing lint cleanly (not just suppressing) surfaced a few real TS-strictness patterns worth remembering: `expect.any(X)` used as an *object-literal property value* trips `no-unsafe-assignment` (its declared return type is `any`) even though the same matcher passed directly as a bare argument to `toEqual`/`toHaveBeenCalledWith` is fine (governed by `no-unsafe-argument`, downgraded to `warn` in this project's eslint config) — the fix is asserting dynamic fields (`timestamp`, `correlationId`) as separate standalone `expect(...)` calls rather than embedding them in `objectContaining`/`toMatchObject`. Comparing a plain `number` against an `HttpStatus` enum member with `>=` trips `no-unsafe-enum-comparison`; an inline `as number` cast gets stripped right back out by `no-unnecessary-type-assertion`'s autofix, so the working fix is a module-level `const` explicitly typed `number`.
   * Live-verified against the real `jsonplaceholder.typicode.com` (started the app with `npm run start`, `curl`'d it, killed it after): confirmed the `{data, meta}` envelope, upstream-404 passthrough, unmatched-route 404 envelope, validation-rejection 400 with field messages, and correlation-id echo/generation all behave as intended outside of mocks too.
 
+### [x] Phase 4: Writes on Posts
+
+* **Dependency:** Installed `@nestjs/swagger` (`^11.4.7`) — not for docs yet (that's Phase 7), just for its `PartialType` mapped-type helper.
+* **DTOs:**
+  * `src/modules/posts/dto/create-post.dto.ts`: `title`/`body` (`@IsString @IsNotEmpty`), `userId` (`@Type(() => Number) @IsInt @IsPositive`) — same explicit-`@Type` style as `QueryPostsDto`, even though the global `ValidationPipe`'s `enableImplicitConversion` would likely cover a JSON-body number too; kept for consistency with the existing DTO.
+  * `src/modules/posts/dto/update-post.dto.ts`: `UpdatePostDto extends PartialType(CreatePostDto)` — a single DTO reused for both `PUT` and `PATCH`, per the plan. All fields optional; JSONPlaceholder doesn't distinguish full-replace vs partial-update semantics server-side anyway.
+* **`PostsService`:** added `create` (`upstream.post`), `update` (`upstream.put`), `patch` (`upstream.patch`), `remove` (`upstream.delete`) — all thin passthroughs, consistent with the existing `findAll`/`findOne` style. `remove` returns `Promise<object>` since JSONPlaceholder's `DELETE` responds `200 {}` rather than `204 No Content`, and the response still needs to flow through `TransformInterceptor`'s `{ data, meta }` envelope.
+* **`PostsController`:** added `@Post()` (201, `CreatePostDto` body), `@Put(':id')`/`@Patch(':id')` (200, `ParsePositiveIntPipe` id + `UpdatePostDto` body), `@Delete(':id')` (200, `ParsePositiveIntPipe` id). Nest's `Post` decorator is imported as `HttpPost` to avoid colliding with the `Post` entity class name already in scope.
+* **Testing & Verification:**
+  * Unit tests: `posts.service.spec.ts` and `posts.controller.spec.ts` extended with `create`/`update`/`patch`/`remove` cases (call-contract assertions + error propagation, matching the existing `findAll`/`findOne` pattern) — 58/58 unit tests passing across the project.
+  * E2E (`test/posts.e2e-spec.ts`): nocked passthrough for all four write verbs, plus 400s for missing required fields, an unknown/whitelisted-out property (`forbidNonWhitelisted`), a non-positive-integer `:id`, and an invalid field type (`userId: 'not-a-number'`) — 24/24 e2e tests passing.
+  * Clean `npm run build` and `npm run lint` (0 errors; same pre-existing `supertest`/`App` `no-unsafe-argument` warnings as prior phases).
+  * Live-verified against the real `jsonplaceholder.typicode.com` (`npm run start`, `curl`'d, killed after): confirmed `POST` returns a plausible new resource (`id: 101`), `PUT`/`PATCH`/`DELETE` all return `200` with the expected envelope, and the validation 400 lists field-level messages for a payload missing `body`/`userId`. Confirms the "JSONPlaceholder fakes persistence" behavior firsthand — a `GET` after these writes would not reflect them.
+* **README:** added a "Description" section replacing the stock Nest boilerplate line, plus a note that `POST`/`PUT`/`PATCH`/`DELETE` on `/posts` proxy through correctly but JSONPlaceholder doesn't actually persist writes, so it doesn't look like a proxy bug later.
+
 ## Active Context & Architectural Decisions
 
 * **Path Aliases Dropped:** Decided against `tsconfig` path aliases (`@common/*`, etc.) to prevent build pipeline fragility with Nest CLI's standard `tsc` compiler. Using clean relative imports instead.
@@ -96,9 +111,9 @@
 
 ## Next Immediate Task
 
-Implement **Phase 4 (Writes on Posts)**:
+Implement **Phase 5 (Remaining resources + nested routes)**:
 
-* `POST`/`PUT`/`PATCH`/`DELETE` on `/posts`, with `CreatePostDto` and `UpdatePostDto` (the latter via `PartialType(CreatePostDto)` — first use of `@nestjs/swagger`'s mapped types, so `@nestjs/swagger` needs installing even though Swagger docs themselves are still Phase 7).
-* Note in the README that JSONPlaceholder fakes persistence (writes succeed but don't actually persist upstream) so behavior doesn't look like a bug later.
-* E2E 400s proving the new DTOs are validated (relying on the global `ValidationPipe` from Phase 3 — no new pipe wiring needed).
-* Decide whether write methods need any special `UpstreamException`/`AllExceptionsFilter` handling beyond what Phase 3 already covers (e.g. is there a write-specific upstream failure mode worth a distinct status code), or whether the existing 502/504/passthrough logic already covers it as-is.
+* Users, Comments, Todos, Albums, Photos — each following the Phase 2/4 read+write template established by `PostsModule`.
+* Nested routes: `/posts/:id/comments`, `/users/:id/posts`, `/users/:id/todos`, `/users/:id/albums`, `/albums/:id/photos`.
+* Per the plan's flagged judgment call: write Users longhand first (second full vertical slice), then decide whether a shared base service/controller is worth abstracting before repeating the pattern for Comments/Todos/Albums/Photos — resist over-abstracting prematurely.
+* Note: Phase 4 closed out the plan's write-specific open question — no new `UpstreamException`/`AllExceptionsFilter` handling was needed for writes; the existing 502/504/passthrough logic from Phase 3 covers `POST`/`PUT`/`PATCH`/`DELETE` upstream failures identically to reads.
