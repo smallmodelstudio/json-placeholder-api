@@ -1,5 +1,6 @@
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
+import { Comment } from '../src/modules/comments/entities/comment.entity';
 import { Post } from '../src/modules/posts/entities/post.entity';
 import { createTestApp } from './support/create-test-app';
 import { ErrorEnvelope, SuccessEnvelope } from './support/response-envelope';
@@ -168,6 +169,29 @@ describe('Posts (e2e)', () => {
 
     it('rejects a non-positive-integer id with 400', async () => {
       await request(app.getHttpServer()).delete('/posts/abc').expect(400);
+    });
+  });
+
+  describe('GET /posts/:id/comments', () => {
+    it('returns the comments belonging to the post', async () => {
+      const comments = [
+        { id: 1, postId: 1, name: 'n', email: 'e@example.com', body: 'b' },
+      ];
+      mockUpstream()
+        .get('/comments')
+        .query({ postId: '1' })
+        .reply(200, comments);
+
+      const response = await request(app.getHttpServer())
+        .get('/posts/1/comments')
+        .expect(200);
+
+      const body = response.body as SuccessEnvelope<Comment[]>;
+      expect(body.data).toEqual(comments);
+    });
+
+    it('rejects a non-positive-integer id with 400', async () => {
+      await request(app.getHttpServer()).get('/posts/abc/comments').expect(400);
     });
   });
 });

@@ -1,12 +1,10 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { UpstreamService } from '../../upstream/upstream.service';
-import { CommentsService } from '../comments/comments.service';
-import { Comment } from '../comments/entities/comment.entity';
-import { PostsService } from './posts.service';
-import { Post } from './entities/post.entity';
+import { TodosService } from './todos.service';
+import { Todo } from './entities/todo.entity';
 
-describe('PostsService', () => {
-  let service: PostsService;
+describe('TodosService', () => {
+  let service: TodosService;
   let upstream: {
     get: jest.Mock;
     post: jest.Mock;
@@ -14,7 +12,6 @@ describe('PostsService', () => {
     patch: jest.Mock;
     delete: jest.Mock;
   };
-  let commentsService: { findAll: jest.Mock };
 
   beforeEach(async () => {
     upstream = {
@@ -24,28 +21,28 @@ describe('PostsService', () => {
       patch: jest.fn(),
       delete: jest.fn(),
     };
-    commentsService = { findAll: jest.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
-        PostsService,
+        TodosService,
         { provide: UpstreamService, useValue: upstream },
-        { provide: CommentsService, useValue: commentsService },
       ],
     }).compile();
 
-    service = module.get(PostsService);
+    service = module.get(TodosService);
   });
 
   describe('findAll', () => {
-    it('calls the upstream posts endpoint with no params when userId is absent', async () => {
-      const posts: Post[] = [{ id: 1, userId: 1, title: 't', body: 'b' }];
-      upstream.get.mockResolvedValueOnce(posts);
+    it('calls the upstream todos endpoint with no params when userId is absent', async () => {
+      const todos: Todo[] = [
+        { id: 1, userId: 1, title: 't', completed: false },
+      ];
+      upstream.get.mockResolvedValueOnce(todos);
 
       const result = await service.findAll({});
 
-      expect(result).toBe(posts);
-      expect(upstream.get).toHaveBeenCalledWith('/posts', {
+      expect(result).toBe(todos);
+      expect(upstream.get).toHaveBeenCalledWith('/todos', {
         params: undefined,
       });
     });
@@ -55,7 +52,7 @@ describe('PostsService', () => {
 
       await service.findAll({ userId: 7 });
 
-      expect(upstream.get).toHaveBeenCalledWith('/posts', {
+      expect(upstream.get).toHaveBeenCalledWith('/todos', {
         params: { userId: 7 },
       });
     });
@@ -69,14 +66,14 @@ describe('PostsService', () => {
   });
 
   describe('findOne', () => {
-    it('calls the upstream endpoint for a single post by id', async () => {
-      const post: Post = { id: 5, userId: 1, title: 't', body: 'b' };
-      upstream.get.mockResolvedValueOnce(post);
+    it('calls the upstream endpoint for a single todo by id', async () => {
+      const todo: Todo = { id: 5, userId: 1, title: 't', completed: true };
+      upstream.get.mockResolvedValueOnce(todo);
 
       const result = await service.findOne(5);
 
-      expect(result).toBe(post);
-      expect(upstream.get).toHaveBeenCalledWith('/posts/5');
+      expect(result).toBe(todo);
+      expect(upstream.get).toHaveBeenCalledWith('/todos/5');
     });
 
     it('propagates upstream errors', async () => {
@@ -88,15 +85,15 @@ describe('PostsService', () => {
   });
 
   describe('create', () => {
-    it('posts the dto to the upstream posts endpoint', async () => {
-      const dto = { title: 't', body: 'b', userId: 1 };
-      const created: Post = { id: 101, ...dto };
+    it('posts the dto to the upstream todos endpoint', async () => {
+      const dto = { userId: 1, title: 't', completed: false };
+      const created: Todo = { id: 101, ...dto };
       upstream.post.mockResolvedValueOnce(created);
 
       const result = await service.create(dto);
 
       expect(result).toBe(created);
-      expect(upstream.post).toHaveBeenCalledWith('/posts', dto);
+      expect(upstream.post).toHaveBeenCalledWith('/todos', dto);
     });
 
     it('propagates upstream errors', async () => {
@@ -104,21 +101,21 @@ describe('PostsService', () => {
       upstream.post.mockRejectedValueOnce(error);
 
       await expect(
-        service.create({ title: 't', body: 'b', userId: 1 }),
+        service.create({ userId: 1, title: 't', completed: false }),
       ).rejects.toThrow(error);
     });
   });
 
   describe('update', () => {
     it('puts the dto to the upstream endpoint for the given id', async () => {
-      const dto = { title: 't', body: 'b', userId: 1 };
-      const updated: Post = { id: 1, ...dto };
+      const dto = { userId: 1, title: 't', completed: true };
+      const updated: Todo = { id: 1, ...dto };
       upstream.put.mockResolvedValueOnce(updated);
 
       const result = await service.update(1, dto);
 
       expect(result).toBe(updated);
-      expect(upstream.put).toHaveBeenCalledWith('/posts/1', dto);
+      expect(upstream.put).toHaveBeenCalledWith('/todos/1', dto);
     });
 
     it('propagates upstream errors', async () => {
@@ -131,14 +128,14 @@ describe('PostsService', () => {
 
   describe('patch', () => {
     it('patches the dto to the upstream endpoint for the given id', async () => {
-      const dto = { title: 'new title' };
-      const patched: Post = { id: 1, userId: 1, title: 'new title', body: 'b' };
+      const dto = { completed: true };
+      const patched: Todo = { id: 1, userId: 1, title: 't', completed: true };
       upstream.patch.mockResolvedValueOnce(patched);
 
       const result = await service.patch(1, dto);
 
       expect(result).toBe(patched);
-      expect(upstream.patch).toHaveBeenCalledWith('/posts/1', dto);
+      expect(upstream.patch).toHaveBeenCalledWith('/todos/1', dto);
     });
 
     it('propagates upstream errors', async () => {
@@ -156,7 +153,7 @@ describe('PostsService', () => {
       const result = await service.remove(1);
 
       expect(result).toEqual({});
-      expect(upstream.delete).toHaveBeenCalledWith('/posts/1');
+      expect(upstream.delete).toHaveBeenCalledWith('/todos/1');
     });
 
     it('propagates upstream errors', async () => {
@@ -164,27 +161,6 @@ describe('PostsService', () => {
       upstream.delete.mockRejectedValueOnce(error);
 
       await expect(service.remove(999)).rejects.toThrow(error);
-    });
-  });
-
-  describe('findComments', () => {
-    it('delegates to CommentsService.findAll with the postId filter', async () => {
-      const comments: Comment[] = [
-        { id: 1, postId: 1, name: 'n', email: 'e@example.com', body: 'b' },
-      ];
-      commentsService.findAll.mockResolvedValueOnce(comments);
-
-      const result = await service.findComments(1);
-
-      expect(result).toBe(comments);
-      expect(commentsService.findAll).toHaveBeenCalledWith({ postId: 1 });
-    });
-
-    it('propagates errors from CommentsService', async () => {
-      const error = new Error('upstream failure');
-      commentsService.findAll.mockRejectedValueOnce(error);
-
-      await expect(service.findComments(1)).rejects.toThrow(error);
     });
   });
 });

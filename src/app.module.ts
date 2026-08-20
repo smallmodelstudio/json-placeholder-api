@@ -10,6 +10,11 @@ import configuration from './config/configuration';
 import { validate } from './config/env.validation';
 import { UpstreamModule } from './upstream/upstream.module';
 import { PostsModule } from './modules/posts/posts.module';
+import { UsersModule } from './modules/users/users.module';
+import { CommentsModule } from './modules/comments/comments.module';
+import { TodosModule } from './modules/todos/todos.module';
+import { AlbumsModule } from './modules/albums/albums.module';
+import { PhotosModule } from './modules/photos/photos.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
@@ -25,6 +30,11 @@ import { CorrelationIdMiddleware } from './common/middleware/correlation-id.midd
     }),
     UpstreamModule,
     PostsModule,
+    UsersModule,
+    CommentsModule,
+    TodosModule,
+    AlbumsModule,
+    PhotosModule,
   ],
   controllers: [],
   providers: [

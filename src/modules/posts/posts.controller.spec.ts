@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { Comment } from '../comments/entities/comment.entity';
 import { PostsController } from './posts.controller';
 import { PostsService } from './posts.service';
 import { Post } from './entities/post.entity';
@@ -12,6 +13,7 @@ describe('PostsController', () => {
     update: jest.Mock;
     patch: jest.Mock;
     remove: jest.Mock;
+    findComments: jest.Mock;
   };
 
   beforeEach(async () => {
@@ -22,6 +24,7 @@ describe('PostsController', () => {
       update: jest.fn(),
       patch: jest.fn(),
       remove: jest.fn(),
+      findComments: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -103,6 +106,20 @@ describe('PostsController', () => {
 
       expect(result).toEqual({});
       expect(service.remove).toHaveBeenCalledWith(5);
+    });
+  });
+
+  describe('findComments', () => {
+    it('delegates to PostsService.findComments with the parsed id', async () => {
+      const comments: Comment[] = [
+        { id: 1, postId: 5, name: 'n', email: 'e@example.com', body: 'b' },
+      ];
+      service.findComments.mockResolvedValueOnce(comments);
+
+      const result = await controller.findComments(5);
+
+      expect(result).toBe(comments);
+      expect(service.findComments).toHaveBeenCalledWith(5);
     });
   });
 });

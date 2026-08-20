@@ -10,6 +10,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { ParsePositiveIntPipe } from '../../common/pipes/parse-positive-int.pipe';
+import { Comment } from '../comments/entities/comment.entity';
 import { CreatePostDto } from './dto/create-post.dto';
 import { QueryPostsDto } from './dto/query-posts.dto';
 import { UpdatePostDto } from './dto/update-post.dto';
@@ -54,5 +55,12 @@ export class PostsController {
   @Delete(':id')
   remove(@Param('id', ParsePositiveIntPipe) id: number): Promise<object> {
     return this.postsService.remove(id);
+  }
+
+  @Get(':id/comments')
+  findComments(
+    @Param('id', ParsePositiveIntPipe) id: number,
+  ): Promise<Comment[]> {
+    return this.postsService.findComments(id);
   }
 }

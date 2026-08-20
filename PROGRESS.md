@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-**Phase 5: Remaining resources + nested routes** (Next)
+**Phase 6: Production hardening** (Next)
 
 ## Completed Phases
 
@@ -98,6 +98,31 @@
   * Live-verified against the real `jsonplaceholder.typicode.com` (`npm run start`, `curl`'d, killed after): confirmed `POST` returns a plausible new resource (`id: 101`), `PUT`/`PATCH`/`DELETE` all return `200` with the expected envelope, and the validation 400 lists field-level messages for a payload missing `body`/`userId`. Confirms the "JSONPlaceholder fakes persistence" behavior firsthand — a `GET` after these writes would not reflect them.
 * **README:** added a "Description" section replacing the stock Nest boilerplate line, plus a note that `POST`/`PUT`/`PATCH`/`DELETE` on `/posts` proxy through correctly but JSONPlaceholder doesn't actually persist writes, so it doesn't look like a proxy bug later.
 
+### [x] Phase 5: Remaining Resources + Nested Routes
+
+* **Scope decision (checked with the user before starting):** full CRUD (`GET` list/one + `POST`/`PUT`/`PATCH`/`DELETE`) for all five remaining resources, matching Posts exactly — not read-only. Hand-write each resource longhand rather than extracting a generic base service/controller, per PLAN.md's own caveat that premature generics tend to fight Nest's DI system; the four post-Users resources (Comments/Todos/Albums/Photos) turned out simple and near-identical enough that this held up fine with no abstraction regretted.
+* **New modules, each following the exact Posts shape** (`entities/`, `dto/{query,create,update}-*.dto.ts`, `*.service.ts`, `*.controller.ts`, `*.module.ts`, plus `.spec.ts` for service and controller):
+  * `src/modules/comments/` — `Comment { id, postId, name, email, body }`. `CreateCommentDto.email` uses `@IsEmail()`.
+  * `src/modules/todos/` — `Todo { id, userId, title, completed }`. `CreateTodoDto.completed` uses `@IsBoolean()`.
+  * `src/modules/photos/` — `Photo { id, albumId, title, url, thumbnailUrl }`. `CreatePhotoDto.url`/`thumbnailUrl` use `@IsUrl()`.
+  * `src/modules/albums/` — `Album { id, userId, title }`.
+  * `src/modules/users/` — `User { id, name, username, email, address, phone, website, company }`, with nested `Address { street, suite, city, zipcode, geo }`, `Geo { lat, lng }`, `Company { name, catchPhrase, bs }` classes. First use of nested DTO validation: `CreateUserDto` uses private `GeoDto`/`AddressDto`/`CompanyDto` classes (declared in the same file, not exported — only `CreateUserDto` needs them) with `@ValidateNested() @Type(() => XDto)`. `Geo.lat`/`lng` use `@IsLatitude()`/`@IsLongitude()` (accept JSONPlaceholder's numeric-string format directly). `phone`/`website` deliberately left as plain `@IsString()` rather than stricter validators (`@IsPhoneNumber()`, `@IsUrl()`) since real JSONPlaceholder fixture data (`"1-770-736-8031 x56442"`, `"hildegard.org"` with no protocol) wouldn't pass them.
+  * `UpdateXDto = PartialType(CreateXDto)` for every resource, same pattern as `UpdatePostDto`.
+* **Nested routes — owned by the parent path's controller, not a separate router:**
+  * `GET /posts/:id/comments` on `PostsController`, backed by `PostsService.findComments()` which now takes `CommentsService` as a constructor dependency and delegates to `CommentsService.findAll({ postId })` — reuses the existing query-filter logic rather than duplicating an upstream call.
+  * `GET /users/:id/posts`, `GET /users/:id/todos`, `GET /users/:id/albums` on `UsersController`, backed by `UsersService` delegating to `PostsService.findAll({ userId })` / `TodosService.findAll({ userId })` / `AlbumsService.findAll({ userId })` respectively.
+  * `GET /albums/:id/photos` on `AlbumsController`, backed by `AlbumsService.findPhotos()` delegating to `PhotosService.findAll({ albumId })`.
+  * This makes the module dependency graph a DAG: `PostsModule` imports `CommentsModule`; `AlbumsModule` imports `PhotosModule`; `UsersModule` imports `PostsModule`, `TodosModule`, `AlbumsModule`. Every module that's a nested-route dependency also `exports` its service. `AppModule` imports all six feature modules directly (not relying on transitive re-imports) so route registration doesn't depend on the nested-route wiring staying intact.
+  * Route ordering is a non-issue: `:id/comments` (two path segments) never collides with `:id` (one segment) in Nest's underlying path-to-regexp matching, so no explicit ordering care was needed.
+* **`Post` decorator/entity name collision:** both `PostsController` and `UsersController` import the `Post` entity class (Users needs it for the `findPosts` nested route) alongside `@nestjs/common`'s `Post` HTTP-method decorator — both import the decorator as `HttpPost`, same fix as Phase 4. No other resource name collides with a Nest decorator.
+* **Real bug caught by E2E testing, not just a test-writing mistake:** `@ValidateNested()` alone does **not** enforce that a nested property is present — it only recurses into validating a nested object's own fields *if* the object exists; sending a `CreateUserDto` payload with `address` omitted entirely passed validation and fell through to a real (unmocked) upstream call, which nock correctly rejected as a network error, surfacing as an unexpected 502 in an E2E test that expected 400. Fixed by adding `@IsNotEmptyObject()` ahead of `@ValidateNested()` on `address`, `company` (`CreateUserDto`) and `geo` (`AddressDto`) — confirmed live afterward (`"address must be a non-empty object"`). Worth remembering for any future nested-object DTO: `@ValidateNested()` needs a presence/type check alongside it, it doesn't provide one itself.
+* **`enableImplicitConversion` coerces booleans in a way that can silently defeat a negative test:** the global `ValidationPipe`'s implicit conversion runs `Boolean(value)` against any string for a `boolean`-typed field, and `Boolean(x)` is truthy for *every* non-empty string — so `completed: 'yes'` on `CreateTodoDto` doesn't fail `@IsBoolean()`, it gets silently coerced to `true` and passes. There's no string value that can trigger this specific validation failure; the Todos E2E "invalid completed" test was rewritten to omit the field entirely (`undefined` correctly fails `@IsBoolean()` since there's no `@IsOptional()`) rather than sending a bad value for it.
+* **Testing & Verification:**
+  * Unit tests: full `findAll`/`findOne`/`create`/`update`/`patch`/`remove` coverage for all five new services + controllers, plus dedicated cases for the three new nested-route methods (`PostsService.findComments`, `AlbumsService.findPhotos`, and `UsersService.findPosts`/`findTodos`/`findAlbums`) asserting the delegate-to-sibling-service call contract — 167/167 unit tests passing across the project (up from 61).
+  * E2E: `test/{comments,todos,photos,albums}.e2e-spec.ts` (new, one per resource — happy-path CRUD + one representative validation 400 each) and `test/users.e2e-spec.ts` (new — full CRUD, missing-nested-object 400, invalid-lat/lng 400, plus all three nested routes). `test/posts.e2e-spec.ts` extended with `GET /posts/:id/comments`. 77/77 e2e tests passing (up from 24).
+  * Clean `npm run build` and `npm run lint` (0 errors; same pre-existing `supertest`/`App` `no-unsafe-argument` warnings as prior phases, now duplicated across the additional e2e spec files).
+  * Live-verified against the real `jsonplaceholder.typicode.com` (`npm run start`, `curl`'d, killed after): all five nested-route endpoints return real filtered data; `POST /users` with a full nested address/company payload succeeds and echoes a new `id`; the same payload with `address` omitted returns the expected 400 with `"address must be a non-empty object"`; `DELETE /albums/1` returns `200 {}`.
+
 ## Active Context & Architectural Decisions
 
 * **Path Aliases Dropped:** Decided against `tsconfig` path aliases (`@common/*`, etc.) to prevent build pipeline fragility with Nest CLI's standard `tsc` compiler. Using clean relative imports instead.
@@ -111,9 +136,10 @@
 
 ## Next Immediate Task
 
-Implement **Phase 5 (Remaining resources + nested routes)**:
+Implement **Phase 6 (Production hardening)**:
 
-* Users, Comments, Todos, Albums, Photos — each following the Phase 2/4 read+write template established by `PostsModule`.
-* Nested routes: `/posts/:id/comments`, `/users/:id/posts`, `/users/:id/todos`, `/users/:id/albums`, `/albums/:id/photos`.
-* Per the plan's flagged judgment call: write Users longhand first (second full vertical slice), then decide whether a shared base service/controller is worth abstracting before repeating the pattern for Comments/Todos/Albums/Photos — resist over-abstracting prematurely.
-* Note: Phase 4 closed out the plan's write-specific open question — no new `UpstreamException`/`AllExceptionsFilter` handling was needed for writes; the existing 502/504/passthrough logic from Phase 3 covers `POST`/`PUT`/`PATCH`/`DELETE` upstream failures identically to reads.
+* `CacheModule` (`@nestjs/cache-manager`) with a per-route TTL — genuinely justified here since upstream JSONPlaceholder data is static; add cache-hit tests (assert a second request within the TTL doesn't re-hit the nocked upstream).
+* `ThrottlerModule` global guard to protect the upstream from being hammered — first Guard in the project.
+* `@nestjs/terminus` health check at `/health` using `HttpHealthIndicator` pinging JSONPlaceholder.
+* Graceful shutdown hooks.
+* Full API surface is now in place (Posts, Users, Comments, Todos, Albums, Photos, all five nested routes) — Phase 6 is about behavior under load, not new resources. Phase 7 (Swagger/docs/polish, contract tests, coverage review) still follows after.
