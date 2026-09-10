@@ -1,3 +1,4 @@
+import { describe, it, beforeEach, expect, vi, Mock } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
 import { Photo } from '../photos/entities/photo.entity';
 import { AlbumsController } from './albums.controller';
@@ -7,24 +8,24 @@ import { Album } from './entities/album.entity';
 describe('AlbumsController', () => {
   let controller: AlbumsController;
   let service: {
-    findAll: jest.Mock;
-    findOne: jest.Mock;
-    create: jest.Mock;
-    update: jest.Mock;
-    patch: jest.Mock;
-    remove: jest.Mock;
-    findPhotos: jest.Mock;
+    findAll: Mock;
+    findOne: Mock;
+    create: Mock;
+    update: Mock;
+    patch: Mock;
+    remove: Mock;
+    findPhotos: Mock;
   };
 
   beforeEach(async () => {
     service = {
-      findAll: jest.fn(),
-      findOne: jest.fn(),
-      create: jest.fn(),
-      update: jest.fn(),
-      patch: jest.fn(),
-      remove: jest.fn(),
-      findPhotos: jest.fn(),
+      findAll: vi.fn(),
+      findOne: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      patch: vi.fn(),
+      remove: vi.fn(),
+      findPhotos: vi.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({

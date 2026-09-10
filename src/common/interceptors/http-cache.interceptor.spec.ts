@@ -1,3 +1,4 @@
+import { describe, it, expect, vi } from 'vitest';
 import { ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { HttpCacheInterceptor } from './http-cache.interceptor';
@@ -5,8 +6,8 @@ import { HttpCacheInterceptor } from './http-cache.interceptor';
 describe('HttpCacheInterceptor', () => {
   const makeInterceptor = (): HttpCacheInterceptor => {
     const interceptor = new HttpCacheInterceptor(
-      { get: jest.fn(), set: jest.fn() },
-      { get: jest.fn().mockReturnValue(undefined) } as unknown as Reflector,
+      { get: vi.fn(), set: vi.fn() },
+      { get: vi.fn().mockReturnValue(undefined) } as unknown as Reflector,
     );
     // httpAdapterHost is normally property-injected by Nest; faked here so
     // the inherited default trackBy() (exercised for non-health paths) has

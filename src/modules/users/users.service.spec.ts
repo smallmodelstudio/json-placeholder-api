@@ -1,3 +1,4 @@
+import { describe, it, beforeEach, expect, vi, Mock } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
 import { UpstreamService } from '../../upstream/upstream.service';
 import { AlbumsService } from '../albums/albums.service';
@@ -34,27 +35,27 @@ const sampleUser: User = { id: 1, ...userDto };
 describe('UsersService', () => {
   let service: UsersService;
   let upstream: {
-    get: jest.Mock;
-    post: jest.Mock;
-    put: jest.Mock;
-    patch: jest.Mock;
-    delete: jest.Mock;
+    get: Mock;
+    post: Mock;
+    put: Mock;
+    patch: Mock;
+    delete: Mock;
   };
-  let postsService: { findAll: jest.Mock };
-  let todosService: { findAll: jest.Mock };
-  let albumsService: { findAll: jest.Mock };
+  let postsService: { findAll: Mock };
+  let todosService: { findAll: Mock };
+  let albumsService: { findAll: Mock };
 
   beforeEach(async () => {
     upstream = {
-      get: jest.fn(),
-      post: jest.fn(),
-      put: jest.fn(),
-      patch: jest.fn(),
-      delete: jest.fn(),
+      get: vi.fn(),
+      post: vi.fn(),
+      put: vi.fn(),
+      patch: vi.fn(),
+      delete: vi.fn(),
     };
-    postsService = { findAll: jest.fn() };
-    todosService = { findAll: jest.fn() };
-    albumsService = { findAll: jest.fn() };
+    postsService = { findAll: vi.fn() };
+    todosService = { findAll: vi.fn() };
+    albumsService = { findAll: vi.fn() };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [

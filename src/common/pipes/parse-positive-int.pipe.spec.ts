@@ -1,3 +1,4 @@
+import { describe, it, beforeEach, expect } from 'vitest';
 import { ArgumentMetadata, BadRequestException } from '@nestjs/common';
 import { ParsePositiveIntPipe } from './parse-positive-int.pipe';
 

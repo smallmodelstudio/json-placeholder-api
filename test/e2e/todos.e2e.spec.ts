@@ -1,9 +1,10 @@
+import { describe, it, beforeEach, afterEach, expect } from 'vitest';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { Todo } from '../src/modules/todos/entities/todo.entity';
-import { createTestApp } from './support/create-test-app';
-import { ErrorEnvelope, SuccessEnvelope } from './support/response-envelope';
-import { mockUpstream } from './support/upstream-mock';
+import { Todo } from '../../src/modules/todos/entities/todo.entity';
+import { createTestApp } from '../support/create-test-app';
+import { ErrorEnvelope, SuccessEnvelope } from '../support/response-envelope';
+import { mockUpstream } from '../support/upstream-mock';
 
 describe('Todos (e2e)', () => {
   let app: INestApplication;

@@ -1,10 +1,11 @@
+import { describe, it, beforeEach, afterEach, expect } from 'vitest';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { Album } from '../src/modules/albums/entities/album.entity';
-import { Photo } from '../src/modules/photos/entities/photo.entity';
-import { createTestApp } from './support/create-test-app';
-import { ErrorEnvelope, SuccessEnvelope } from './support/response-envelope';
-import { mockUpstream } from './support/upstream-mock';
+import { Album } from '../../src/modules/albums/entities/album.entity';
+import { Photo } from '../../src/modules/photos/entities/photo.entity';
+import { createTestApp } from '../support/create-test-app';
+import { ErrorEnvelope, SuccessEnvelope } from '../support/response-envelope';
+import { mockUpstream } from '../support/upstream-mock';
 
 describe('Albums (e2e)', () => {
   let app: INestApplication;

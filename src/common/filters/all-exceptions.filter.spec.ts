@@ -1,4 +1,14 @@
 import {
+  describe,
+  it,
+  beforeEach,
+  afterEach,
+  expect,
+  vi,
+  Mock,
+  MockInstance,
+} from 'vitest';
+import {
   ArgumentsHost,
   BadRequestException,
   Logger,
@@ -12,16 +22,16 @@ import { AllExceptionsFilter } from './all-exceptions.filter';
 
 describe('AllExceptionsFilter', () => {
   let filter: AllExceptionsFilter;
-  let jsonMock: jest.Mock<void, [Record<string, unknown>]>;
-  let statusMock: jest.Mock;
+  let jsonMock: Mock<(response: Record<string, unknown>) => void>;
+  let statusMock: Mock;
   let host: ArgumentsHost;
-  let errorSpy: jest.SpyInstance;
+  let errorSpy: MockInstance;
 
   beforeEach(() => {
     filter = new AllExceptionsFilter();
-    jsonMock = jest.fn<void, [Record<string, unknown>]>();
-    statusMock = jest.fn().mockReturnValue({ json: jsonMock });
-    errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    jsonMock = vi.fn<(response: Record<string, unknown>) => void>();
+    statusMock = vi.fn().mockReturnValue({ json: jsonMock });
+    errorSpy = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
 
     host = {
       switchToHttp: () => ({

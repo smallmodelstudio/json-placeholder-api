@@ -1,3 +1,4 @@
+import { describe, it, beforeAll, afterAll, expect } from 'vitest';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { Comment } from '../../src/modules/comments/entities/comment.entity';

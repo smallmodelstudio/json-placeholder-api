@@ -1,3 +1,4 @@
+import { describe, it, beforeEach, expect, vi, Mock } from 'vitest';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { HealthCheckService, HttpHealthIndicator } from '@nestjs/terminus';
@@ -5,15 +6,15 @@ import { HealthController } from './health.controller';
 
 describe('HealthController', () => {
   let controller: HealthController;
-  let health: { check: jest.Mock };
-  let http: { pingCheck: jest.Mock };
-  let configService: { get: jest.Mock };
+  let health: { check: Mock };
+  let http: { pingCheck: Mock };
+  let configService: { get: Mock };
 
   beforeEach(async () => {
-    health = { check: jest.fn() };
-    http = { pingCheck: jest.fn() };
+    health = { check: vi.fn() };
+    http = { pingCheck: vi.fn() };
     configService = {
-      get: jest.fn().mockReturnValue('https://jsonplaceholder.typicode.com'),
+      get: vi.fn().mockReturnValue('https://jsonplaceholder.typicode.com'),
     };
 
     const module: TestingModule = await Test.createTestingModule({

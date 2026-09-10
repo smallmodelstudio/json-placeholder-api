@@ -1,9 +1,10 @@
+import { describe, it, beforeEach, afterEach, expect } from 'vitest';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { Comment } from '../src/modules/comments/entities/comment.entity';
-import { createTestApp } from './support/create-test-app';
-import { ErrorEnvelope, SuccessEnvelope } from './support/response-envelope';
-import { mockUpstream } from './support/upstream-mock';
+import { Comment } from '../../src/modules/comments/entities/comment.entity';
+import { createTestApp } from '../support/create-test-app';
+import { ErrorEnvelope, SuccessEnvelope } from '../support/response-envelope';
+import { mockUpstream } from '../support/upstream-mock';
 
 describe('Comments (e2e)', () => {
   let app: INestApplication;

@@ -1,8 +1,9 @@
+import { describe, it, afterEach } from 'vitest';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { createTestApp } from './support/create-test-app';
-import { mockUpstream } from './support/upstream-mock';
-import { withEnvOverrides } from './support/with-env-overrides';
+import { createTestApp } from '../support/create-test-app';
+import { mockUpstream } from '../support/upstream-mock';
+import { withEnvOverrides } from '../support/with-env-overrides';
 
 describe('Rate limiting (e2e)', () => {
   let app: INestApplication;

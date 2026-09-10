@@ -1,3 +1,4 @@
+import { describe, it, beforeEach, expect, vi, Mock } from 'vitest';
 import { Request, Response } from 'express';
 import {
   CORRELATION_ID_HEADER,
@@ -6,18 +7,18 @@ import {
 
 describe('CorrelationIdMiddleware', () => {
   let middleware: CorrelationIdMiddleware;
-  let next: jest.Mock;
+  let next: Mock;
 
   beforeEach(() => {
     middleware = new CorrelationIdMiddleware();
-    next = jest.fn();
+    next = vi.fn();
   });
 
   const makeReq = (header?: string): Request =>
-    ({ header: jest.fn().mockReturnValue(header) }) as unknown as Request;
+    ({ header: vi.fn().mockReturnValue(header) }) as unknown as Request;
 
-  const makeRes = (): { res: Response; setHeader: jest.Mock } => {
-    const setHeader = jest.fn();
+  const makeRes = (): { res: Response; setHeader: Mock } => {
+    const setHeader = vi.fn();
     return { res: { setHeader } as unknown as Response, setHeader };
   };
 

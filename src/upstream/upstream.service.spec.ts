@@ -1,3 +1,4 @@
+import { describe, it, beforeEach, expect, vi, Mock } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
@@ -19,7 +20,7 @@ import {
  */
 function respondWith<T>(...emissions: Observable<T>[]) {
   let attempt = 0;
-  const attempts = jest.fn();
+  const attempts = vi.fn();
   const source = new Observable<T>((subscriber) => {
     attempts();
     const emission = emissions[Math.min(attempt, emissions.length - 1)];
@@ -31,7 +32,7 @@ function respondWith<T>(...emissions: Observable<T>[]) {
 
 describe('UpstreamService', () => {
   let service: UpstreamService;
-  let httpService: { request: jest.Mock };
+  let httpService: { request: Mock };
 
   const makeAxiosResponse = <T>(data: T): AxiosResponse<T> =>
     ({
@@ -50,7 +51,7 @@ describe('UpstreamService', () => {
   };
 
   beforeEach(async () => {
-    httpService = { request: jest.fn() };
+    httpService = { request: vi.fn() };
 
     const configValues: Record<string, unknown> = {
       'http.baseUrl': 'https://jsonplaceholder.typicode.com',
@@ -64,7 +65,7 @@ describe('UpstreamService', () => {
         { provide: HttpService, useValue: httpService },
         {
           provide: ConfigService,
-          useValue: { get: jest.fn((key: string) => configValues[key]) },
+          useValue: { get: vi.fn((key: string) => configValues[key]) },
         },
       ],
     }).compile();

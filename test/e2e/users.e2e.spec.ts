@@ -1,12 +1,13 @@
+import { describe, it, beforeEach, afterEach, expect } from 'vitest';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { Album } from '../src/modules/albums/entities/album.entity';
-import { Post } from '../src/modules/posts/entities/post.entity';
-import { Todo } from '../src/modules/todos/entities/todo.entity';
-import { User } from '../src/modules/users/entities/user.entity';
-import { createTestApp } from './support/create-test-app';
-import { ErrorEnvelope, SuccessEnvelope } from './support/response-envelope';
-import { mockUpstream } from './support/upstream-mock';
+import { Album } from '../../src/modules/albums/entities/album.entity';
+import { Post } from '../../src/modules/posts/entities/post.entity';
+import { Todo } from '../../src/modules/todos/entities/todo.entity';
+import { User } from '../../src/modules/users/entities/user.entity';
+import { createTestApp } from '../support/create-test-app';
+import { ErrorEnvelope, SuccessEnvelope } from '../support/response-envelope';
+import { mockUpstream } from '../support/upstream-mock';
 
 const validUserPayload = {
   name: 'Leanne Graham',

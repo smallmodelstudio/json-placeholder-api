@@ -13,12 +13,13 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:cov": "jest --coverage",
-    "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json",
-    "test:contract": "RUN_CONTRACT_TESTS=1 jest --config ./test/jest-contract.json"
+    "test": "vitest run --project unit",
+    "test:watch": "vitest --project unit",
+    "test:cov": "vitest run --project unit --coverage",
+    "test:debug": "vitest --project unit --inspect-brk --no-file-parallelism",
+    "test:e2e": "vitest run --project e2e",
+    "test:contract": "RUN_CONTRACT_TESTS=1 vitest run --project contract",
+    "test:all": "vitest run"
   },
   "dependencies": {
     "@nestjs/axios": "^4.0.1",
@@ -43,41 +44,23 @@
     "@nestjs/cli": "^11.0.0",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
+    "@swc/core": "^1.16.2",
     "@types/express": "^5.0.0",
-    "@types/jest": "^30.0.0",
     "@types/node": "^24.0.0",
     "@types/supertest": "^7.0.0",
+    "@vitest/coverage-v8": "^5.0.0",
     "eslint": "^9.18.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.2",
     "globals": "^17.0.0",
-    "jest": "^30.0.0",
     "nock": "^14.0.17",
     "prettier": "^3.4.2",
     "source-map-support": "^0.5.21",
     "supertest": "^7.0.0",
-    "ts-jest": "^29.2.5",
     "ts-loader": "^9.5.2",
-    "ts-node": "^10.9.2",
-    "tsconfig-paths": "^4.2.0",
     "typescript": "^5.7.3",
-    "typescript-eslint": "^8.20.0"
-  },
-  "jest": {
-    "moduleFileExtensions": [
-      "js",
-      "json",
-      "ts"
-    ],
-    "rootDir": "src",
-    "testRegex": ".*\\.spec\\.ts$",
-    "transform": {
-      "^.+\\.(t|j)s$": "ts-jest"
-    },
-    "collectCoverageFrom": [
-      "**/*.(t|j)s"
-    ],
-    "coverageDirectory": "../coverage",
-    "testEnvironment": "node"
+    "typescript-eslint": "^8.20.0",
+    "unplugin-swc": "^1.6.0",
+    "vitest": "^5.0.0"
   }
 }

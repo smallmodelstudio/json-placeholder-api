@@ -1,9 +1,10 @@
+import { describe, it, beforeEach, afterEach, expect } from 'vitest';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { Post } from '../src/modules/posts/entities/post.entity';
-import { createTestApp } from './support/create-test-app';
-import { SuccessEnvelope } from './support/response-envelope';
-import { mockUpstream } from './support/upstream-mock';
+import { Post } from '../../src/modules/posts/entities/post.entity';
+import { createTestApp } from '../support/create-test-app';
+import { SuccessEnvelope } from '../support/response-envelope';
+import { mockUpstream } from '../support/upstream-mock';
 
 describe('Response caching (e2e)', () => {
   let app: INestApplication;

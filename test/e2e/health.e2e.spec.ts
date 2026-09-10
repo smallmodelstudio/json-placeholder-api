@@ -1,7 +1,8 @@
+import { describe, it, beforeEach, afterEach, expect } from 'vitest';
 import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { createTestApp } from './support/create-test-app';
-import { mockUpstream } from './support/upstream-mock';
+import { createTestApp } from '../support/create-test-app';
+import { mockUpstream } from '../support/upstream-mock';
 
 describe('Health (e2e)', () => {
   let app: INestApplication;
