@@ -149,6 +149,16 @@ Two things worth knowing if you poke at this further:
   liveness never depends on the upstream, so a bad JSONPlaceholder day
   doesn't trigger a restart loop.
 
+### CI/CD (Harness)
+
+Pipeline-as-code lives under `.harness/`: a CI pipeline (lint, typecheck,
+unit, and e2e tests, then build/push the image and promote its tag into
+`k8s/overlays/local`), and a CD pipeline (roll out to the local k3d cluster
+from Phase 6, smoke-test it, then gate a prod rollout behind a manual
+approval). See `.harness/README.md` for the setup checklist — a Harness
+account, a Delegate installed into k3d, and a handful of connectors are
+required before any of it runs, none of which this repo can provide for you.
+
 ## Resources
 
 Check out a few resources that may come in handy when working with NestJS:

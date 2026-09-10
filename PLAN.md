@@ -517,14 +517,43 @@ the UI — it's reviewable, and it's how you'd actually run it.
 
 ### Work
 
+- [x] CI pipeline with the Phase 1/2 scripts as explicit parallel steps.
+      (`.harness/pipelines/ci.yaml`: `npm ci`, then lint/typecheck/unit in
+      parallel, then e2e, then build+push the image, then a `Run` step that
+      promotes the built tag into `k8s/overlays/local` via `kustomize edit
+      set image` and a git commit/push — see "Why CI promotes the image tag
+      via a git commit" in `.harness/README.md`.)
+- [x] CD pipeline consuming the Phase 6 Kustomize overlays.
+      (`.harness/pipelines/cd.yaml`: `K8sRollingDeploy` against
+      `local_k3d_infra` → smoke test → `HarnessApproval` → `K8sRollingDeploy`
+      against `prod_infra`, each backed by `.harness/services/` +
+      `.harness/environments/` + `.harness/infrastructures/` entities whose
+      `overlay` variable selects `k8s/overlays/{local,prod}`.)
+- [x] Add a **deployment verification** step.
+      (A `ShellScript` smoke-test step after each rollout, curling
+      `/health/ready` and `/posts/1` against the in-cluster Service — not
+      Harness's metrics-based Continuous Verification, which needs real
+      data from Phase 8 first; see the step's comment in `cd.yaml`.)
+- [x] Optional: contract tests (`RUN_CONTRACT_TESTS=1`) as a scheduled pipeline rather
+      than a PR gate, so upstream flakiness never blocks a merge.
+      (`.harness/pipelines/contract-tests.yaml` + a daily cron
+      `.harness/triggers/contract-tests-cron.yaml`.)
 - [ ] Harness account; install Delegate into the k3d cluster; verify it connects.
 - [ ] Connectors: GitHub, Docker registry, Kubernetes.
-- [ ] CI pipeline with the Phase 1/2 scripts as explicit parallel steps.
-- [ ] CD pipeline consuming the Phase 6 Kustomize overlays.
-- [ ] Add a **deployment verification** step — Harness's native health gating is one
-      of its more distinctive features and pairs directly with Phase 8.
-- [ ] Optional: contract tests (`RUN_CONTRACT_TESTS=1`) as a scheduled pipeline rather
-      than a PR gate, so upstream flakiness never blocks a merge.
+
+**What actually happened:** this phase was implemented as pipeline-as-code
+only, at explicit request, because the remaining two items require a real
+Harness account, a Delegate token generated per-account through the Harness
+UI, and connector credentials — none of which this environment has or can
+generate non-interactively. `.harness/*.yaml` is written to the real Harness
+NextGen schema and documents every placeholder that needs a real value once
+the account exists (`.harness/README.md`'s setup checklist), the same
+"unverified, written to the same shape" treatment `k8s/overlays/prod` got in
+Phase 6. One correctness fix along the way: the CD smoke-test step runs *on
+the Delegate*, which is itself a pod inside the k3d cluster, so it curls the
+in-cluster Service (`json-placeholder-api.default.svc.cluster.local`)
+rather than the host-mapped Traefik port (`localhost:8080`) that Phase 6's
+README uses from the WSL2 host — those are different network namespaces.
 
 ---
 

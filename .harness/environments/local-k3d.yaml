@@ -1,0 +1,10 @@
+environment:
+  name: local-k3d
+  identifier: local_k3d
+  type: PreProduction
+  orgIdentifier: default
+  projectIdentifier: json_placeholder_api
+  variables:
+    - name: overlay
+      type: String
+      value: local

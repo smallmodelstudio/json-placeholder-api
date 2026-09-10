@@ -1,0 +1,44 @@
+pipeline:
+  name: Contract tests
+  identifier: json_placeholder_api_contract_tests
+  projectIdentifier: json_placeholder_api
+  orgIdentifier: default
+  tags: {}
+  properties:
+    ci:
+      codebase:
+        connectorRef: account.REPLACE_WITH_REAL_GITHUB_CONNECTOR
+        build: <+input>
+  stages:
+    - stage:
+        name: Contract tests
+        identifier: contract_tests
+        type: CI
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Install dependencies
+                  identifier: install_deps
+                  spec:
+                    shell: Sh
+                    command: npm ci
+              - step:
+                  type: Run
+                  name: Contract tests against real upstream
+                  identifier: contract_tests
+                  spec:
+                    shell: Sh
+                    # Hits the real jsonplaceholder.typicode.com — deliberately
+                    # run on a schedule (see triggers/contract-tests-cron.yaml)
+                    # rather than as a PR gate, so upstream flakiness never
+                    # blocks a merge (PLAN.md Phase 7's "optional" item).
+                    command: npm run test:contract

@@ -1,0 +1,117 @@
+pipeline:
+  name: CI
+  identifier: json_placeholder_api_ci
+  projectIdentifier: json_placeholder_api
+  orgIdentifier: default
+  tags: {}
+  properties:
+    ci:
+      codebase:
+        connectorRef: account.REPLACE_WITH_REAL_GITHUB_CONNECTOR
+        build: <+input>
+  stages:
+    - stage:
+        name: Build and test
+        identifier: build_and_test
+        type: CI
+        spec:
+          cloneCodebase: true
+          platform:
+            os: Linux
+            arch: Amd64
+          # Cloud runner keeps this inside the free 2,000 credits/month tier
+          # (PLAN.md Phase 7). Swap to a self-hosted runner connector once
+          # that budget is a real constraint — the steps below don't change.
+          runtime:
+            type: Cloud
+            spec: {}
+          execution:
+            steps:
+              - step:
+                  type: Run
+                  name: Install dependencies
+                  identifier: install_deps
+                  spec:
+                    shell: Sh
+                    command: npm ci
+
+              # Mirrors the three independent checks Phase 1/2 already gate
+              # local work on (npm run lint / typecheck / test) — run in
+              # parallel since none of them depend on each other's output.
+              - parallel:
+                  - step:
+                      type: Run
+                      name: Lint
+                      identifier: lint
+                      spec:
+                        shell: Sh
+                        command: npm run lint
+                  - step:
+                      type: Run
+                      name: Typecheck
+                      identifier: typecheck
+                      spec:
+                        shell: Sh
+                        command: npm run typecheck
+                  - step:
+                      type: Run
+                      name: Unit tests
+                      identifier: unit_tests
+                      spec:
+                        shell: Sh
+                        command: npm run test
+
+              - step:
+                  type: Run
+                  name: E2E tests
+                  identifier: e2e_tests
+                  spec:
+                    shell: Sh
+                    # Nock-mocked (test/README.md) — never touches the real
+                    # network, so this is safe to run on every PR. Contract
+                    # tests hit the real upstream and are deliberately kept
+                    # out of this pipeline; see contract-tests.yaml.
+                    command: npm run test:e2e
+
+              - step:
+                  type: BuildAndPushDockerRegistry
+                  name: Build and push image
+                  identifier: build_and_push
+                  spec:
+                    connectorRef: account.REPLACE_WITH_REAL_REGISTRY_CONNECTOR
+                    repo: REPLACE_WITH_REAL_REGISTRY/json-placeholder-api
+                    dockerfile: Dockerfile
+                    tags:
+                      - <+codebase.shortCommitSha>
+                      - latest
+                  when:
+                    stageStatus: Success
+                    condition: <+codebase.build.type> == "branch" && <+codebase.branch> == "master"
+
+              - step:
+                  type: Run
+                  name: Promote image tag to local overlay
+                  identifier: promote_local_overlay
+                  spec:
+                    shell: Sh
+                    # GitOps-style promotion: CI writes the tag it just built
+                    # into the overlay that CD reads, rather than Harness
+                    # substituting an artifact into the Kustomize manifest at
+                    # deploy time. Chosen over Harness's manifest/artifact
+                    # coupling for Kustomize because that path is unverified
+                    # against a real tenant (see .harness/README.md) — this
+                    # way CD only ever applies exactly what's committed.
+                    command: |
+                      set -euo pipefail
+                      cd k8s/overlays/local
+                      npx kustomize edit set image \
+                        json-placeholder-api=k3d-jsonplaceholder-registry:5000/json-placeholder-api:<+codebase.shortCommitSha>
+                      cd -
+                      git config user.name "harness-ci"
+                      git config user.email "ci@REPLACE_WITH_REAL_DOMAIN"
+                      git add k8s/overlays/local/kustomization.yaml
+                      git commit -m "chore(deploy): promote json-placeholder-api to <+codebase.shortCommitSha>"
+                      git push origin HEAD:<+codebase.branch>
+                  when:
+                    stageStatus: Success
+                    condition: <+codebase.build.type> == "branch" && <+codebase.branch> == "master"

@@ -1,0 +1,10 @@
+environment:
+  name: prod
+  identifier: prod
+  type: Production
+  orgIdentifier: default
+  projectIdentifier: json_placeholder_api
+  variables:
+    - name: overlay
+      type: String
+      value: prod

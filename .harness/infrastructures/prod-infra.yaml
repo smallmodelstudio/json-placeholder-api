@@ -1,0 +1,17 @@
+infrastructureDefinition:
+  name: prod-infra
+  identifier: prod_infra
+  orgIdentifier: default
+  projectIdentifier: json_placeholder_api
+  environmentRef: prod
+  deploymentType: Kubernetes
+  type: KubernetesDirect
+  spec:
+    # Unvalidated, same as k8s/overlays/prod: there is no prod cluster in
+    # this project yet. Points at a second Delegate/connector so that a real
+    # cluster (Oracle Always Free + k3s, or a managed offering) can be
+    # dropped in later without touching the pipeline itself.
+    connectorRef: account.REPLACE_WITH_REAL_PROD_K8S_CONNECTOR
+    namespace: default
+    releaseName: json-placeholder-api
+  allowSimultaneousDeployments: false

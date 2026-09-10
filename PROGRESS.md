@@ -260,6 +260,69 @@ depends on Phase 5's Docker image).
 - Not done: no CI for any of this yet (Phase 7), and `prod` overlay
   remains unvalidated against a real cluster by design — see above.
 
+### Phase 7 — Harness CI/CD
+
+Implemented out of phase-number order (Phase 3, Pagination, is still not
+started — same rationale as Phases 4-6: it was never a prerequisite), and
+scoped to **pipeline-as-code only**, at explicit request: the remaining
+work needs a real Harness account, a per-account Delegate token generated
+through the Harness UI, and connector credentials, none of which this
+environment can create non-interactively.
+
+- `.harness/pipelines/ci.yaml`: `npm ci` → lint/typecheck/unit in parallel
+  → e2e → `BuildAndPushDockerRegistry` → a `Run` step that promotes the
+  built tag into `k8s/overlays/local` (`kustomize edit set image` +
+  git commit/push). The last two steps are gated to `master` only.
+- `.harness/pipelines/cd.yaml`: `K8sRollingDeploy` against `local_k3d_infra`
+  → `ShellScript` smoke test (curls `/health/ready` and `/posts/1`) →
+  `HarnessApproval` → `K8sRollingDeploy` against `prod_infra` → smoke test.
+  Each `K8sRollingDeploy` has a matching `K8sRollingRollback` in
+  `rollbackSteps`.
+- `.harness/pipelines/contract-tests.yaml` + `.harness/triggers/contract-tests-cron.yaml`:
+  `npm run test:contract` on a daily cron rather than a PR gate, per
+  `PLAN.md`'s "optional" item — upstream flakiness never blocks a merge.
+- `.harness/services/json-placeholder-api.yaml`, `.harness/environments/{local-k3d,prod}.yaml`,
+  `.harness/infrastructures/{local-k3d,prod}-infra.yaml`: a Kubernetes
+  service definition with one Kustomize manifest source, and two
+  environments whose `overlay` variable selects `k8s/overlays/local` vs.
+  `k8s/overlays/prod` — the same base/overlay split Phase 6 already built.
+- **Chose git-commit promotion over Harness's native Kustomize
+  artifact-substitution path** (a "Kustomize Patches" manifest type layered
+  on top of the base manifest) for getting the CI-built image tag into the
+  deployed manifest. The native path is the more "Harness-idiomatic" answer
+  but is the piece of this setup furthest from anything verifiable without
+  a real tenant; git-commit promotion is a plain, testable-in-principle
+  GitOps pattern (CI writes the tag, CD applies whatever's committed) with
+  no coupling between the two pipelines beyond git. Documented as a
+  deliberate choice, not an oversight, in `.harness/README.md`.
+- **Correctness fix while drafting the smoke-test step**: it runs `onDelegate: true`,
+  and the Delegate is itself installed as a pod inside the k3d cluster (that's
+  the entire point of Harness's outbound-only model) — so it shares the
+  cluster's network namespace, not the WSL2 host's. A first draft curled
+  `http://localhost:8080` (Phase 6's host-mapped Traefik port); fixed to
+  curl the in-cluster Service directly
+  (`json-placeholder-api.default.svc.cluster.local`), which needs no
+  Ingress/host-header dance at all from inside the cluster.
+- **Deployment verification step is a plain smoke test, not Harness's
+  metrics-based Continuous Verification** — `PLAN.md` explicitly wants that
+  paired with Phase 8, and there's no real metrics backend yet for it to
+  gate on. The `ShellScript` step is the honest interim version: the same
+  two curls Phase 6 verified by hand, now automated and blocking rollout.
+- Every external identifier (connector refs, registry, user group, prod
+  host) is a `REPLACE_WITH_REAL_*` placeholder, matching the convention
+  `k8s/overlays/prod` already established in Phase 6. `.harness/README.md`
+  is the setup checklist: Harness account → install the Delegate into k3d
+  (the one genuinely interactive step — the token is generated per-account
+  in the UI) → four connectors → find-and-replace the placeholders → import
+  entities in dependency order (services → environments →
+  infrastructures → pipelines → triggers) → run CI by hand once before
+  trusting CD against the cluster.
+- Not verified end-to-end against a real Harness tenant (no account exists
+  in this project) — everything above was checked against the documented
+  Harness NextGen YAML schema and this repo's actual file paths/service
+  names/branch, not against a live pipeline run. `README.md` gained a short
+  "CI/CD (Harness)" subsection pointing at `.harness/README.md`.
+
 ## Current Phase
 
 ### Phase 3 — Pagination
@@ -268,7 +331,9 @@ Not started. See `PLAN.md` for the upstream pagination semantics, the
 `getWithMeta()` refactor, and the four call sites (DTOs, interceptor,
 nested routes, Swagger) it touches. No longer a prerequisite for any
 other phase — pagination was always independent feature work, not a
-platform prerequisite. Phase 7 (Harness CI/CD) is next up otherwise.
+platform prerequisite. Phase 8 (Observability) is next up otherwise, once
+a real Harness account exists to finish wiring Phase 7's connectors and
+Delegate.
 
 ## Active Context Architecture
 
