@@ -28,8 +28,7 @@ export class UpstreamService {
     return this.request<T>({
       method: 'GET',
       url: path,
-      params: options?.params,
-      headers: options?.headers,
+      ...this.toAxiosOptions(options),
     });
   }
 
@@ -42,8 +41,7 @@ export class UpstreamService {
       method: 'POST',
       url: path,
       data: body,
-      params: options?.params,
-      headers: options?.headers,
+      ...this.toAxiosOptions(options),
     });
   }
 
@@ -56,8 +54,7 @@ export class UpstreamService {
       method: 'PUT',
       url: path,
       data: body,
-      params: options?.params,
-      headers: options?.headers,
+      ...this.toAxiosOptions(options),
     });
   }
 
@@ -70,8 +67,7 @@ export class UpstreamService {
       method: 'PATCH',
       url: path,
       data: body,
-      params: options?.params,
-      headers: options?.headers,
+      ...this.toAxiosOptions(options),
     });
   }
 
@@ -79,9 +75,20 @@ export class UpstreamService {
     return this.request<T>({
       method: 'DELETE',
       url: path,
-      params: options?.params,
-      headers: options?.headers,
+      ...this.toAxiosOptions(options),
     });
+  }
+
+  // `exactOptionalPropertyTypes` forbids assigning `params`/`headers`
+  // explicitly as `undefined` onto `AxiosRequestConfig` — the key must be
+  // absent rather than present-with-undefined, hence the conditional spread.
+  private toAxiosOptions(
+    options?: UpstreamRequestOptions,
+  ): Pick<AxiosRequestConfig, 'params' | 'headers'> {
+    return {
+      ...(options?.params !== undefined && { params: options.params }),
+      ...(options?.headers !== undefined && { headers: options.headers }),
+    };
   }
 
   private async request<T>(config: AxiosRequestConfig): Promise<T> {

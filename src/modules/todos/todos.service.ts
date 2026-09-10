@@ -11,7 +11,7 @@ export class TodosService {
 
   findAll(query: QueryTodosDto): Promise<Todo[]> {
     return this.upstream.get<Todo[]>('/todos', {
-      params: query.userId !== undefined ? { userId: query.userId } : undefined,
+      ...(query.userId !== undefined && { params: { userId: query.userId } }),
     });
   }
 

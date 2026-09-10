@@ -15,7 +15,7 @@ import { createTestApp } from '../support/create-test-app';
 // to catch upstream drift that our nock fixtures — which we wrote by hand,
 // so they only ever assert what we already believe is true — never could.
 const describeIfEnabled =
-  process.env.RUN_CONTRACT_TESTS === '1' ? describe : describe.skip;
+  process.env['RUN_CONTRACT_TESTS'] === '1' ? describe : describe.skip;
 
 describeIfEnabled('JSONPlaceholder contract', () => {
   let app: INestApplication;
@@ -37,7 +37,10 @@ describeIfEnabled('JSONPlaceholder contract', () => {
     expect(Array.isArray(posts)).toBe(true);
     expect(posts.length).toBeGreaterThan(0);
 
-    const [post] = posts;
+    const post = posts[0];
+    if (!post) {
+      throw new Error('expected at least one post');
+    }
     // expect.any() must be a bare argument here, not nested inside an
     // object literal passed to toMatchObject/objectContaining — the latter
     // trips @typescript-eslint/no-unsafe-assignment (see posts.e2e-spec.ts

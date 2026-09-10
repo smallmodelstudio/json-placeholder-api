@@ -148,8 +148,11 @@ describe('AllExceptionsFilter', () => {
         correlationId: 'corr-1',
       }),
     );
-    const envelope = jsonMock.mock.calls[0][0];
-    expect(envelope.timestamp).toEqual(expect.any(String));
+    const call = jsonMock.mock.calls[0];
+    if (!call) {
+      throw new Error('expected jsonMock to have been called');
+    }
+    expect(call[0]['timestamp']).toEqual(expect.any(String));
   });
 
   it('logs server errors (5xx) but the log call does not affect the response', () => {

@@ -25,6 +25,9 @@ function respondWith<T>(...emissions: Observable<T>[]) {
     attempts();
     const emission = emissions[Math.min(attempt, emissions.length - 1)];
     attempt += 1;
+    if (!emission) {
+      throw new Error('respondWith requires at least one emission');
+    }
     return emission.subscribe(subscriber);
   });
   return { source, attempts };

@@ -16,7 +16,7 @@ export class PostsService {
 
   findAll(query: QueryPostsDto): Promise<Post[]> {
     return this.upstream.get<Post[]>('/posts', {
-      params: query.userId !== undefined ? { userId: query.userId } : undefined,
+      ...(query.userId !== undefined && { params: { userId: query.userId } }),
     });
   }
 

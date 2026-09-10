@@ -139,21 +139,29 @@ is safe to adopt now — and when 7.1 lands, you flip the emit path over and del
 
 ### Work
 
-- [ ] Bump to `typescript@6`. Expect breakage; set `"ignoreDeprecations": "6.0"` as a
+- [x] Bump to `typescript@6`. Expect breakage; set `"ignoreDeprecations": "6.0"` as a
       temporary escape hatch, then remove it once the warnings are cleared.
-- [ ] Confirm `experimentalDecorators` + `emitDecoratorMetadata` survive the bump —
+      (No escape hatch needed in practice — the only deprecation hit was
+      `baseUrl`, which was unused and got removed instead of suppressed.)
+- [x] Confirm `experimentalDecorators` + `emitDecoratorMetadata` survive the bump —
       they are not on the 6.0 deprecation list, but verify rather than assume, since
       the whole app depends on them.
-- [ ] Add `typescript-go` (`tsgo`) as a dev dependency; add
+- [x] Add `typescript-go` (`tsgo`) as a dev dependency; add
       `"typecheck": "tsgo --noEmit -p tsconfig.json"`.
-- [ ] Tighten `tsconfig.json` while you are in there — `CLAUDE.md` promises "strict
+      (Package is `@typescript/native-preview` on npm.)
+- [x] Tighten `tsconfig.json` while you are in there — `CLAUDE.md` promises "strict
       TypeScript rules" but the config stops at `strict: true`. Missing and worth
       adding: `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`,
       `noImplicitOverride`, `noUnusedLocals`, `noUnusedParameters`,
       `noPropertyAccessFromIndexSignature`. `noUncheckedIndexedAccess` in particular
       will surface real gaps around `STATUS_CODES[...]` in
       `src/common/filters/all-exceptions.filter.ts`.
-- [ ] Reconsider `skipLibCheck: true` once `tsgo` makes full checking cheap.
+      (That specific line was already safe — `?? 'Error'` — but the other five
+      flags surfaced real gaps; see `PROGRESS.md`.)
+- [x] Reconsider `skipLibCheck: true` once `tsgo` makes full checking cheap.
+      (Tried it — cheap to run, but surfaces unfixable errors inside
+      `@nestjs/cache-manager`/`unplugin`/`vite`/`vitest`'s own `.d.ts` files.
+      Kept `true`; see `PROGRESS.md`.)
 
 ### Done when
 
