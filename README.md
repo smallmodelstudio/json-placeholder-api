@@ -89,16 +89,65 @@ $ npm run test:contract
 
 ## Deployment
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+### Docker
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+# build the image (multi-stage — see Dockerfile)
+$ docker build -t json-placeholder-api:local .
+
+# or via compose, which also reads .env.example for local config
+$ docker compose up --build
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+The image runs as non-root `node`, forwards `SIGTERM` via `dumb-init` so
+`app.enableShutdownHooks()` (`src/app.module.ts`) actually fires, and exposes
+`GET /health/live` as its `HEALTHCHECK`.
+
+### Kubernetes (local, via k3d)
+
+Manifests live under `k8s/`: `base/` has the Deployment, Service, Ingress,
+ConfigMap, HPA, and PodDisruptionBudget; `overlays/local/` and
+`overlays/prod/` patch them per environment with Kustomize. Only `local` has
+been applied against a real cluster — `prod` is written to the same shape
+but points at placeholder registry/host values until a real cluster exists.
+
+The loop, build → import → apply → curl:
+
+```bash
+# 1. spin up a k3d cluster with an attached local registry
+$ ./k8s/k3d/create-cluster.sh
+
+# 2. build and push the image to that registry (published on localhost:5000)
+$ docker build -t localhost:5000/json-placeholder-api:local .
+$ docker push localhost:5000/json-placeholder-api:local
+
+# 3. apply the local overlay (1 replica, dev logging, Traefik ingress)
+$ kubectl apply -k k8s/overlays/local
+$ kubectl rollout status deployment/json-placeholder-api
+
+# 4. hit it through Traefik — no /etc/hosts edit needed, just set Host
+$ curl -H 'Host: api.localhost' http://localhost:8080/posts/1
+$ curl -H 'Host: api.localhost' http://localhost:8080/docs
+
+# tear down
+$ ./k8s/k3d/delete-cluster.sh
+```
+
+Two things worth knowing if you poke at this further:
+
+- **The image ref inside the cluster is not `localhost:5000/...`.** The host
+  can reach the registry at `localhost:5000` because k3d publishes that
+  port, but the node's containerd only has a registry mirror configured for
+  `k3d-jsonplaceholder-registry:5000` (see `k8s/k3d/create-cluster.sh`'s
+  `--registry-use`) — that's what `overlays/local`'s `images:` transformer
+  rewrites the tag to. Pushing to `localhost:5000` and deploying
+  `k3d-jsonplaceholder-registry:5000/...` is the same image; they're just
+  two different hostnames for the same registry container, seen from two
+  different network namespaces.
+- **`livenessProbe` → `/health/live`, `readinessProbe` → `/health/ready`**
+  (`k8s/base/deployment.yaml`), matching the split from the Docker phase —
+  liveness never depends on the upstream, so a bad JSONPlaceholder day
+  doesn't trigger a restart loop.
 
 ## Resources
 

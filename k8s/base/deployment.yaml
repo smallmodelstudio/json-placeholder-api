@@ -1,0 +1,47 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: json-placeholder-api
+  labels:
+    app: json-placeholder-api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: json-placeholder-api
+  template:
+    metadata:
+      labels:
+        app: json-placeholder-api
+    spec:
+      # Gives in-flight requests + app.enableShutdownHooks() (app.module.ts)
+      # time to drain before the container is SIGKILLed.
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: app
+          image: json-placeholder-api
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - configMapRef:
+                name: json-placeholder-api-config
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi

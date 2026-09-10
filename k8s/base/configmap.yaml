@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: json-placeholder-api-config
+data:
+  # Mirrors .env.example; overlays patch individual keys rather than
+  # redeclaring the whole map.
+  NODE_ENV: production
+  PORT: '3000'
+  UPSTREAM_BASE_URL: https://jsonplaceholder.typicode.com
+  UPSTREAM_TIMEOUT_MS: '5000'
+  UPSTREAM_MAX_RETRIES: '2'
+  CACHE_TTL_MS: '30000'
+  THROTTLE_TTL_MS: '60000'
+  THROTTLE_LIMIT: '20'

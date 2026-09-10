@@ -1,0 +1,64 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+
+# Push from the host to localhost:5000 (the registry's published port),
+# but the in-cluster image ref must use the k3d-managed hostname — the
+# node's containerd only has a registry mirror for that name, not
+# localhost:5000 (see k8s/k3d/create-cluster.sh's --registry-use).
+images:
+  - name: json-placeholder-api
+    newName: k3d-jsonplaceholder-registry:5000/json-placeholder-api
+    newTag: local
+
+replicas:
+  - name: json-placeholder-api
+    count: 1
+
+patches:
+  # No LOG_LEVEL knob exists in src/config — NODE_ENV=development is the
+  # only "debug logging" lever the app actually has (Nest's default logger
+  # doesn't gate on it further, but it's honest to what's wired up).
+  - target:
+      kind: ConfigMap
+      name: json-placeholder-api-config
+    patch: |-
+      - op: replace
+        path: /data/NODE_ENV
+        value: development
+
+  - target:
+      kind: Ingress
+      name: json-placeholder-api
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: api.localhost
+
+  # A single replica doesn't need production-sized resource ceilings.
+  - target:
+      kind: Deployment
+      name: json-placeholder-api
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 250m
+            memory: 128Mi
+
+  # HPA's minReplicas: 2 (base) can't coexist with a 1-replica overlay.
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: json-placeholder-api
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 3

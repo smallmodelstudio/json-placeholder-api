@@ -200,15 +200,75 @@ work, not a platform prerequisite).
   more than before, from the new e2e assertions) and `npm run typecheck`
   both clean.
 
+### Phase 6 — Kubernetes, locally
+
+Implemented out of phase-number order, at explicit request — Phase 3
+(Pagination) is still not started; it was never a prerequisite for this
+phase either (see `PLAN.md`'s "Phase ordering and why": Phase 6 only
+depends on Phase 5's Docker image).
+
+- `k3d` wasn't installed, and the official install script defaults to
+  `/usr/local/bin` via `sudo` — this environment has no passwordless
+  `sudo` and no terminal for an interactive password prompt. Installed to
+  `~/.local/bin` instead (`K3D_INSTALL_DIR=/home/fred/.local/bin
+  USE_SUDO=false`), which was already on `PATH` and needed no privilege
+  escalation.
+- `k8s/base/`: `deployment.yaml` (2 replicas, `envFrom` a ConfigMap,
+  liveness → `/health/live`, readiness → `/health/ready`,
+  `terminationGracePeriodSeconds: 30`), `service.yaml` (ClusterIP :80 →
+  `http`), `ingress.yaml` (Traefik `ingressClassName`, placeholder host —
+  every overlay patches it), `configmap.yaml` (mirrors `.env.example`),
+  `hpa.yaml` (`autoscaling/v2`, CPU-based, 2–5 replicas), `pdb.yaml`
+  (`minAvailable: 1`), `kustomization.yaml` tying them together.
+- `k8s/overlays/local/`: 1 replica, `NODE_ENV=development` (the only
+  "debug logging" lever the app actually exposes — there's no `LOG_LEVEL`
+  in `src/config`), smaller resource requests/limits, HPA range trimmed to
+  1–3 so `minReplicas` doesn't exceed the overlay's own replica count,
+  `host: api.localhost`, and an `images:` transformer pointing at the
+  local registry.
+- `k8s/overlays/prod/`: 3 replicas, production-sized resources, same
+  shape as `local` — but genuinely untested, since there's no real cluster
+  to apply it to. Registry/tag/host are literal `REPLACE_WITH_REAL_*`
+  placeholders rather than guessed values.
+- `k8s/k3d/create-cluster.sh` / `delete-cluster.sh`: creates a
+  `k3d-jsonplaceholder-registry` registry plus a `jsonplaceholder` cluster
+  wired to use it, with the loadbalancer's 80/443 mapped to host 8080/8443
+  (not 80/443 — nothing else on this host was using them, but the higher
+  ports avoid needing any privilege check at all and are the more common
+  k3d convention).
+- **Registry hostname trap**: the host reaches the registry at
+  `localhost:5000` (k3d publishes that port), but the *node's* containerd
+  only gets a mirror entry for `k3d-jsonplaceholder-registry:5000` (from
+  `--registry-use`) — confirmed by reading
+  `/etc/rancher/k3s/registries.yaml` inside the server container. A first
+  attempt with `overlays/local` pointing at `localhost:5000/...` produced
+  `ImagePullBackOff` (`dial tcp [::1]:5000: connect: connection refused`
+  from inside the node). Fixed by making the overlay's `images:`
+  transformer rewrite to `k3d-jsonplaceholder-registry:5000/...` instead —
+  same registry, two different hostnames depending which network
+  namespace you're asking from. Documented in `README.md` since it's the
+  kind of thing that looks like a k3d bug the first time you hit it.
+- Verified end-to-end against the real cluster: `kubectl apply -k
+  k8s/overlays/local` → all six resources created; `kubectl rollout
+  status` → succeeded after the registry-hostname fix; pod `1/1 Running`;
+  `kubectl get hpa` showed real CPU metrics (`4%/70%`) — k3s ships
+  `metrics-server` out of the box, no extra install needed. Through
+  Traefik: `curl -H 'Host: api.localhost' http://localhost:8080/posts/1`
+  → 200, enveloped `{ data, meta }`; `/health/live` → 200; `/health/ready`
+  → 200; `/docs` → 200, Swagger UI. `kubectl kustomize` on both overlays
+  confirmed to render without error (only `local` applied to the cluster).
+- Not done: no CI for any of this yet (Phase 7), and `prod` overlay
+  remains unvalidated against a real cluster by design — see above.
+
 ## Current Phase
 
 ### Phase 3 — Pagination
 
 Not started. See `PLAN.md` for the upstream pagination semantics, the
 `getWithMeta()` refactor, and the four call sites (DTOs, interceptor,
-nested routes, Swagger) it touches. No longer a prerequisite for Phase 4
-or Phase 5 (both complete) — pagination was always independent feature
-work, not a platform prerequisite.
+nested routes, Swagger) it touches. No longer a prerequisite for any
+other phase — pagination was always independent feature work, not a
+platform prerequisite. Phase 7 (Harness CI/CD) is next up otherwise.
 
 ## Active Context Architecture
 

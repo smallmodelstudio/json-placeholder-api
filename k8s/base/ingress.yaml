@@ -1,0 +1,18 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: json-placeholder-api
+spec:
+  ingressClassName: traefik
+  rules:
+    # Placeholder — every overlay patches this to its real host.
+    - host: json-placeholder-api.invalid
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: json-placeholder-api
+                port:
+                  number: 80

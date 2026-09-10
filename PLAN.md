@@ -446,10 +446,26 @@ k8s/
 
 ### Work
 
-- [ ] `k3d cluster create` script + local registry.
-- [ ] Base manifests + two overlays.
-- [ ] Ingress via Traefik; hit the API and `/docs` through it.
-- [ ] Document the loop in `README.md`: build → import → apply → curl.
+- [x] `k3d cluster create` script + local registry.
+      (`k8s/k3d/create-cluster.sh` / `delete-cluster.sh`. `k3d` itself
+      wasn't installed and `/usr/local/bin` needs `sudo`, which this
+      environment can't satisfy non-interactively — installed to
+      `~/.local/bin` instead via the official script's
+      `K3D_INSTALL_DIR`/`USE_SUDO=false` knobs.)
+- [x] Base manifests + two overlays.
+      (`k8s/base/{deployment,service,ingress,configmap,hpa,pdb,kustomization}.yaml`,
+      `k8s/overlays/{local,prod}/kustomization.yaml`. Only `local` has been
+      applied to a real cluster; `prod` renders cleanly via
+      `kubectl kustomize` but points at placeholder registry/host values —
+      there's no prod cluster in this project yet.)
+- [x] Ingress via Traefik; hit the API and `/docs` through it.
+      (k3d ships Traefik by default. Verified via
+      `curl -H 'Host: api.localhost' http://localhost:8080/posts/1` → 200
+      enveloped response, `/health/live` → 200, `/health/ready` → 200,
+      `/docs` → 200.)
+- [x] Document the loop in `README.md`: build → import → apply → curl.
+      (New "Kubernetes (local, via k3d)" subsection under "Deployment",
+      alongside a "Docker" subsection that Phase 5 had left undocumented.)
 
 ---
 
