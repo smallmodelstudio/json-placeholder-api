@@ -1,6 +1,11 @@
 import { INestApplication } from '@nestjs/common';
+import {
+  FastifyAdapter,
+  NestFastifyApplication,
+} from '@nestjs/platform-fastify';
 import { Test, TestingModule, TestingModuleBuilder } from '@nestjs/testing';
 import { AppModule } from '../../src/app.module';
+import { registerCorrelationIdHook } from '../../src/common/hooks/correlation-id.hook';
 
 export interface CreateTestAppOptions {
   /**
@@ -24,7 +29,14 @@ export async function createTestApp(
 
   const moduleFixture: TestingModule = await builder.compile();
 
-  const app = moduleFixture.createNestApplication();
+  const app = moduleFixture.createNestApplication<NestFastifyApplication>(
+    new FastifyAdapter(),
+  );
+  registerCorrelationIdHook(app.getHttpAdapter().getInstance());
   await app.init();
+  // Fastify's underlying server isn't routable until it has finished its own
+  // async boot — supertest hitting getHttpServer() before this resolves
+  // sees connection resets.
+  await app.getHttpAdapter().getInstance().ready();
   return app;
 }

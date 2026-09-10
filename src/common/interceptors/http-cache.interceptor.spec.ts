@@ -23,8 +23,8 @@ describe('HttpCacheInterceptor', () => {
     return interceptor;
   };
 
-  const makeContext = (path: string, url: string): ExecutionContext => {
-    const request = { path, url, method: 'GET' };
+  const makeContext = (routeUrl: string, url: string): ExecutionContext => {
+    const request = { routeOptions: { url: routeUrl }, url, method: 'GET' };
     return {
       switchToHttp: () => ({ getRequest: () => request }),
       getHandler: () => undefined,

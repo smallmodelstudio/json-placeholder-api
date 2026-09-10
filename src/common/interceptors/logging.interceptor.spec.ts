@@ -32,7 +32,7 @@ describe('LoggingInterceptor', () => {
       switchToHttp: () => ({
         getRequest: () => ({
           method: 'GET',
-          originalUrl: '/posts',
+          url: '/posts',
           correlationId: 'corr-1',
         }),
       }),

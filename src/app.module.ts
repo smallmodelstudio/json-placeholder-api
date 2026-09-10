@@ -1,8 +1,6 @@
 import {
   Logger,
-  MiddlewareConsumer,
   Module,
-  NestModule,
   OnApplicationShutdown,
   ValidationPipe,
 } from '@nestjs/common';
@@ -26,7 +24,6 @@ import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { HttpCacheInterceptor } from './common/interceptors/http-cache.interceptor';
 import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
-import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 
 @Module({
   imports: [
@@ -80,18 +77,20 @@ import { CorrelationIdMiddleware } from './common/middleware/correlation-id.midd
     // correlation id; Cache sits next so a hit short-circuits everything
     // inside it (Timeout, the real handler, the upstream call); Timeout sits
     // closest to the handler so it only ever races real work.
+    //
+    // `request.correlationId`, which Logging/Transform/AllExceptionsFilter
+    // all read, is set upstream of all of this by a Fastify `onRequest`
+    // hook (see registerCorrelationIdHook) rather than by an interceptor —
+    // interceptors only run once a route has matched, which would leave
+    // unmatched-route 404s without a correlation id.
     { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
     { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
     { provide: APP_INTERCEPTOR, useClass: HttpCacheInterceptor },
     { provide: APP_INTERCEPTOR, useClass: TimeoutInterceptor },
   ],
 })
-export class AppModule implements NestModule, OnApplicationShutdown {
+export class AppModule implements OnApplicationShutdown {
   private readonly logger = new Logger(AppModule.name);
-
-  configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(CorrelationIdMiddleware).forRoutes('*');
-  }
 
   onApplicationShutdown(signal?: string): void {
     this.logger.log(`Shutting down (signal: ${signal ?? 'unknown'})`);

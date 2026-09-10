@@ -22,22 +22,22 @@ import { AllExceptionsFilter } from './all-exceptions.filter';
 
 describe('AllExceptionsFilter', () => {
   let filter: AllExceptionsFilter;
-  let jsonMock: Mock<(response: Record<string, unknown>) => void>;
+  let sendMock: Mock<(response: Record<string, unknown>) => void>;
   let statusMock: Mock;
   let host: ArgumentsHost;
   let errorSpy: MockInstance;
 
   beforeEach(() => {
     filter = new AllExceptionsFilter();
-    jsonMock = vi.fn<(response: Record<string, unknown>) => void>();
-    statusMock = vi.fn().mockReturnValue({ json: jsonMock });
+    sendMock = vi.fn<(response: Record<string, unknown>) => void>();
+    statusMock = vi.fn().mockReturnValue({ send: sendMock });
     errorSpy = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
 
     host = {
       switchToHttp: () => ({
         getRequest: () => ({
           method: 'GET',
-          originalUrl: '/posts/1',
+          url: '/posts/1',
           correlationId: 'corr-1',
         }),
         getResponse: () => ({ status: statusMock }),
@@ -59,7 +59,7 @@ describe('AllExceptionsFilter', () => {
     filter.catch(exception, host);
 
     expect(statusMock).toHaveBeenCalledWith(404);
-    expect(jsonMock).toHaveBeenCalledWith(
+    expect(sendMock).toHaveBeenCalledWith(
       expect.objectContaining({
         statusCode: 404,
         error: 'Not Found',
@@ -79,7 +79,7 @@ describe('AllExceptionsFilter', () => {
     filter.catch(exception, host);
 
     expect(statusMock).toHaveBeenCalledWith(502);
-    expect(jsonMock).toHaveBeenCalledWith(
+    expect(sendMock).toHaveBeenCalledWith(
       expect.objectContaining({ statusCode: 502, error: 'Bad Gateway' }),
     );
   });
@@ -104,7 +104,7 @@ describe('AllExceptionsFilter', () => {
     filter.catch(exception, host);
 
     expect(statusMock).toHaveBeenCalledWith(504);
-    expect(jsonMock).toHaveBeenCalledWith(
+    expect(sendMock).toHaveBeenCalledWith(
       expect.objectContaining({ error: 'Gateway Timeout' }),
     );
   });
@@ -117,7 +117,7 @@ describe('AllExceptionsFilter', () => {
     filter.catch(exception, host);
 
     expect(statusMock).toHaveBeenCalledWith(400);
-    expect(jsonMock).toHaveBeenCalledWith(
+    expect(sendMock).toHaveBeenCalledWith(
       expect.objectContaining({
         statusCode: 400,
         message: ['userId must be a positive number'],
@@ -130,7 +130,7 @@ describe('AllExceptionsFilter', () => {
     filter.catch(new Error('boom'), host);
 
     expect(statusMock).toHaveBeenCalledWith(500);
-    expect(jsonMock).toHaveBeenCalledWith(
+    expect(sendMock).toHaveBeenCalledWith(
       expect.objectContaining({
         statusCode: 500,
         error: 'Internal Server Error',
@@ -142,15 +142,15 @@ describe('AllExceptionsFilter', () => {
   it('includes path, timestamp, and correlationId on every envelope', () => {
     filter.catch(new NotFoundException(), host);
 
-    expect(jsonMock).toHaveBeenCalledWith(
+    expect(sendMock).toHaveBeenCalledWith(
       expect.objectContaining({
         path: '/posts/1',
         correlationId: 'corr-1',
       }),
     );
-    const call = jsonMock.mock.calls[0];
+    const call = sendMock.mock.calls[0];
     if (!call) {
-      throw new Error('expected jsonMock to have been called');
+      throw new Error('expected sendMock to have been called');
     }
     expect(call[0]['timestamp']).toEqual(expect.any(String));
   });

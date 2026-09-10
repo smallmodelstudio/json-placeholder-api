@@ -82,13 +82,65 @@ See `PLAN.md` for the full roadmap and rationale behind the phase ordering.
   passed, 3 contract skipped), `npm run test:contract` (3 passed against
   the real upstream).
 
+### Phase 4 — Express → Fastify
+
+Implemented out of phase-number order, at explicit request; `PLAN.md`'s
+"Phase ordering and why" and Phase 4 sections were updated to reflect that
+Phase 4 no longer depends on Phase 3 (Pagination) — the two are independent,
+and only Phase 1's Vitest suite was a real prerequisite.
+
+- `NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter())`
+  in `main.ts`; `app.listen({ port, host: '0.0.0.0' })` (the object form —
+  the positional `(port, address)` overload didn't resolve cleanly against
+  `ConfigService.get(...)`'s inferred type under `tsgo`; see below).
+  `@nestjs/platform-fastify` and `@fastify/static` added;
+  `@nestjs/platform-express` and `@types/express` removed.
+- **`CorrelationIdMiddleware` → a Fastify `onRequest` hook**
+  (`common/hooks/correlation-id.hook.ts`, `registerCorrelationIdHook()`),
+  *not* an interceptor as `PLAN.md` originally recommended. Tried the
+  interceptor first; it broke the existing "unknown route gets a 404 envelope
+  with a correlationId" e2e test, because Nest interceptors (and guards) only
+  run once a route has matched — an unmatched path never reaches one. The old
+  middleware ran unconditionally via `forRoutes('*')`, and `onRequest` is the
+  Fastify-native equivalent: fires before routing, for every request, matched
+  or not. Registered on the underlying Fastify instance in both `main.ts` and
+  `test/support/create-test-app.ts` (`app.getHttpAdapter().getInstance()`).
+- `all-exceptions.filter.ts`: `Request`/`Response` → `FastifyRequest`/
+  `FastifyReply`; `.status().json()` → `.status().send()`;
+  `request.originalUrl` → `request.url` (Fastify has no `originalUrl`, and
+  `request.url` already includes the query string, matching the old
+  behaviour and the existing e2e assertion on `path`).
+- `http-cache.interceptor.ts`: `request.path` (Express-only) →
+  `request.routeOptions.url` — the route *pattern*, not `request.url`, since
+  Fastify's `.url` includes the query string and would otherwise change the
+  `/health` cache-exclusion key per query string.
+- `transform.interceptor.ts` / `logging.interceptor.ts`: type-only swap to
+  `FastifyRequest`; `originalUrl` → `url` in the logging interceptor.
+- `common/types/express.d.ts` → `common/types/fastify.d.ts`
+  (`declare module 'fastify' { interface FastifyRequest { correlationId } }`).
+- `test/support/create-test-app.ts`: `createNestApplication<NestFastifyApplication>(new FastifyAdapter())`,
+  then `await app.getHttpAdapter().getInstance().ready()` before returning —
+  supertest hitting `getHttpServer()` before Fastify's async boot finishes
+  saw connection resets otherwise.
+- Verified: `npm run build`, `npm run lint` (0 errors, 95 pre-existing
+  warnings — same count as Phase 1/2), `npm run typecheck` (clean),
+  `npm run test:all` (259 passed, 3 contract skipped), `npm run test:contract`
+  (3 passed against the real upstream). Also ran the app directly (`npm run
+  start`) and curled it: `GET /posts/1` (200, enveloped, cache hit on second
+  call), `GET /nope` (404 envelope with a correlationId — the case the
+  interceptor approach missed), a client-supplied `x-correlation-id` echoed
+  on both the header and `meta.correlationId`, `GET /health` (200, confirmed
+  *not* cached across two calls), `GET /docs` (200, Swagger UI renders with
+  no extra `@fastify/static` wiring needed beyond the dependency itself).
+
 ## Current Phase
 
 ### Phase 3 — Pagination
 
 Not started. See `PLAN.md` for the upstream pagination semantics, the
 `getWithMeta()` refactor, and the four call sites (DTOs, interceptor,
-nested routes, Swagger) it touches.
+nested routes, Swagger) it touches. No longer a prerequisite for Phase 4
+(now complete) — the two phases were independent.
 
 ## Active Context Architecture
 

@@ -6,7 +6,7 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import { Request, Response } from 'express';
+import { FastifyReply, FastifyRequest } from 'fastify';
 import { STATUS_CODES } from 'node:http';
 import {
   UpstreamErrorType,
@@ -36,26 +36,26 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
-    const request = ctx.getRequest<Request>();
-    const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<FastifyRequest>();
+    const response = ctx.getResponse<FastifyReply>();
 
     const resolved = this.resolve(exception);
 
     if (resolved.statusCode >= SERVER_ERROR_THRESHOLD) {
       this.logger.error(
-        `${request.method} ${request.originalUrl} -> ${resolved.statusCode} [${request.correlationId}]`,
+        `${request.method} ${request.url} -> ${resolved.statusCode} [${request.correlationId}]`,
         exception instanceof Error ? exception.stack : undefined,
       );
     }
 
     const envelope: ErrorEnvelope = {
       ...resolved,
-      path: request.originalUrl,
+      path: request.url,
       timestamp: new Date().toISOString(),
       correlationId: request.correlationId,
     };
 
-    response.status(resolved.statusCode).json(envelope);
+    response.status(resolved.statusCode).send(envelope);
   }
 
   private resolve(exception: unknown): ResolvedError {

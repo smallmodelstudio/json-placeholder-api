@@ -10,8 +10,9 @@ Each phase is independently shippable and ends in a green test suite. Update
 
 ## Current state
 
-Nest 11 / Express 5 / TypeScript 5.7 / Jest 30. Six resource modules (posts, users,
-comments, todos, albums, photos) proxying `jsonplaceholder.typicode.com` through a
+Nest 11 / Fastify 5 / TypeScript 6 (tsgo type-checked) / Vitest 5. Six resource
+modules (posts, users, comments, todos, albums, photos) proxying
+`jsonplaceholder.typicode.com` through a
 shared `UpstreamService`, with a `{ data, meta }` success envelope, a global error
 envelope, correlation IDs, caching, throttling, retries, timeouts, Swagger, and
 Terminus health checks. Unit tests colocated in `src/`, e2e + contract tests in `test/`.
@@ -27,11 +28,14 @@ The dependency chain is not the order the ideas were raised:
                               │  migration must land before the TS upgrade.
 2. TypeScript 6 + tsgo       ─┘
 
-3. Pagination                ─── feature work; broadens the test surface that
-                                 Phase 4 will be validated against.
+3. Pagination                ─── feature work; independent of the platform swap
+                                 below, so it can land before or after it.
 
 4. Express → Fastify         ─── the riskiest refactor. Wants a fast, trustworthy
-                                 suite (1) and real endpoint coverage (3) first.
+                                 suite (1) first; doesn't otherwise depend on (3) —
+                                 done ahead of pagination, validated against the
+                                 existing e2e coverage plus a correlation-ID
+                                 round-trip test.
 
 5. Docker                    ─┐
 6. Kubernetes (local)        ─┤  each builds directly on the previous.
@@ -267,12 +271,12 @@ const app = await NestFactory.create<NestFastifyApplication>(
 
 | File | Coupling | Fix |
 |---|---|---|
-| `common/middleware/correlation-id.middleware.ts` | `req.header()`, `res.setHeader()` | see trap below |
-| `common/filters/all-exceptions.filter.ts` | `res.status().json()`, `req.originalUrl` | `.status().send()`; verify `originalUrl` exists on `FastifyRequest` or use `request.url` |
-| `common/interceptors/http-cache.interceptor.ts` | **`request.path`** | Fastify has no `.path` |
+| `common/middleware/correlation-id.middleware.ts` | `req.header()`, `res.setHeader()` | see trap below — replaced by `common/hooks/correlation-id.hook.ts` |
+| `common/filters/all-exceptions.filter.ts` | `res.status().json()`, `req.originalUrl` | `.status().send()`; `request.url` (Fastify has no `originalUrl`) |
+| `common/interceptors/http-cache.interceptor.ts` | **`request.path`** | Fastify has no `.path`; used `request.routeOptions.url` |
 | `common/interceptors/transform.interceptor.ts` | `Request` type only | type swap |
 | `common/interceptors/logging.interceptor.ts` | `Request` type only | type swap |
-| `common/types/express.d.ts` | `namespace Express` augmentation | rewrite as `declare module 'fastify'` |
+| `common/types/express.d.ts` | `namespace Express` augmentation | rewritten as `common/types/fastify.d.ts`, `declare module 'fastify'` |
 
 ### The trap worth understanding
 
@@ -292,6 +296,18 @@ Three ways out, in increasing order of how much they teach you:
    abstraction honest, and is the more idiomatic Nest answer. **Recommended.**
 
 Add an e2e assertion that `x-correlation-id` round-trips *before* starting the swap.
+
+**What actually happened:** option 3 has a gap this plan didn't anticipate.
+Interceptors (and guards) only run once a route has matched; a request to a
+completely unknown path never reaches one, so an interceptor-based
+`CorrelationIdInterceptor` left 404s with no `correlationId` —
+caught immediately by the existing "404 envelope has a correlationId" e2e test,
+since the old middleware ran unconditionally via `forRoutes('*')` and that test
+already existed. Went with **option 2** instead:
+`registerCorrelationIdHook()` in `common/hooks/correlation-id.hook.ts`, a raw
+Fastify `onRequest` hook registered on the underlying instance in both
+`main.ts` and `test/support/create-test-app.ts`. It runs before routing, so it
+covers matched and unmatched routes alike, same as the middleware it replaces.
 
 ### Also on the list
 
@@ -318,13 +334,24 @@ return here, and it's a good reason to do it.
 
 ### Work
 
-- [ ] Add pagination e2e coverage first (Phase 3) and a correlation-ID round-trip test.
-- [ ] `@nestjs/platform-fastify`; remove `@nestjs/platform-express`, `@types/express`.
-- [ ] Rewrite the six files; convert `express.d.ts` → `fastify.d.ts`.
-- [ ] Convert `CorrelationIdMiddleware` to an interceptor.
-- [ ] Fix `create-test-app.ts` for `.ready()`.
-- [ ] `main.ts`: `await app.listen(port, '0.0.0.0')`.
-- [ ] Run the full suite; diff a few responses against a pre-migration capture.
+- [x] Correlation-ID round-trip e2e coverage (already existed — see
+      `test/e2e/errors.e2e.spec.ts`'s "correlation ids" block — so no new test was
+      needed before starting the swap). Not gated on Phase 3 (Pagination), which
+      this phase no longer depends on.
+- [x] `@nestjs/platform-fastify`, `@fastify/static`; removed
+      `@nestjs/platform-express`, `@types/express`.
+- [x] Rewrote the six files; `express.d.ts` → `fastify.d.ts`.
+- [x] Replaced `CorrelationIdMiddleware` with a Fastify `onRequest` hook (not an
+      interceptor — see "What actually happened" above).
+- [x] Fixed `create-test-app.ts` for `.ready()`.
+- [x] `main.ts`: `await app.listen({ port, host: '0.0.0.0' })` (the object form —
+      the positional `(port, address)` overload didn't resolve cleanly against
+      `ConfigService.get(...)`'s inferred type under `tsgo`).
+- [x] Full suite green (259 passed, 3 contract skipped without the env flag,
+      verified separately with `RUN_CONTRACT_TESTS=1`); manually verified against
+      the running app: `GET /posts/1` (200, enveloped), `GET /nope` (404 with a
+      correlationId), correlation-ID echo with a client-supplied header,
+      `GET /health` (200, never cached), `GET /docs` (200, Swagger UI renders).
 
 ---
 
@@ -484,7 +511,7 @@ instrumentation is the correct default regardless of the eventual choice.
 - **Logs**: replace the default Nest logger with `nestjs-pino` for structured JSON,
   and inject `trace_id`/`span_id`. **Then unify `correlationId` with the OTel trace
   ID** so a log line, a trace, and the response envelope all carry the same
-  identifier — the payoff for Phase 4's interceptor rework.
+  identifier — the payoff for Phase 4's `correlationId` rework.
 
 ### Backend
 
