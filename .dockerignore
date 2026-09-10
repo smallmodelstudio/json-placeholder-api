@@ -1,0 +1,26 @@
+# dependencies & build output — installed/built fresh inside the image
+node_modules
+dist
+coverage
+
+# vcs / editor
+.git
+.gitignore
+.vscode
+.idea
+
+# env — never bake these into an image; pass config at `docker run`/compose
+# time instead (see README's "env via --env-file" note)
+.env
+.env.*
+
+# tests — not needed to build or run the compiled app
+test
+
+# docs — irrelevant to the runtime image
+*.md
+.claude
+
+# misc
+*.log
+.nvmrc

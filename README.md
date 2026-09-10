@@ -31,9 +31,9 @@ A [NestJS](https://nestjs.com/) proxy API in front of [JSONPlaceholder](https://
 
 ### Production hardening
 
-- **Caching:** GET responses are cached in-memory (`CACHE_TTL_MS`, default 30s) — check the `X-Cache: HIT`/`MISS` response header. `/health` is always excluded.
-- **Rate limiting:** requests are capped per IP (`THROTTLE_LIMIT` per `THROTTLE_TTL_MS`, default 20 per 60s); exceeding it returns `429`. `/health` is exempt so infra probes are never throttled.
-- **Health check:** `GET /health` pings JSONPlaceholder and returns `503` if it's unreachable — point liveness/readiness probes here.
+- **Caching:** GET responses are cached in-memory (`CACHE_TTL_MS`, default 30s) — check the `X-Cache: HIT`/`MISS` response header. `/health/*` is always excluded.
+- **Rate limiting:** requests are capped per IP (`THROTTLE_LIMIT` per `THROTTLE_TTL_MS`, default 20 per 60s); exceeding it returns `429`. `/health/*` is exempt so infra probes are never throttled.
+- **Health checks:** `GET /health/live` reports whether the process is up, with no dependency checks — point Kubernetes' liveness probe here. `GET /health/ready` pings JSONPlaceholder and returns `503` if it's unreachable — point the readiness probe here.
 
 ### API documentation
 

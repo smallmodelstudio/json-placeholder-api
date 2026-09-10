@@ -34,7 +34,7 @@ async function bootstrap() {
     .addTag('todos', 'Todo items')
     .addTag('albums', 'Photo albums, plus nested /albums/:id/photos')
     .addTag('photos', 'Photos within an album')
-    .addTag('health', 'Liveness/readiness — pings the upstream')
+    .addTag('health', 'Liveness (/health/live) and readiness (/health/ready)')
     .build();
   const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('docs', app, swaggerDocument);

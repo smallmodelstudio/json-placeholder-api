@@ -1,0 +1,17 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: json-placeholder-api:local
+    ports:
+      - '3000:3000'
+    # Copy .env.example to .env (gitignored) and edit it to override
+    # defaults locally; docker-compose reads .env automatically.
+    env_file:
+      - .env.example
+    environment:
+      NODE_ENV: production
+    restart: unless-stopped
+  # Phase 8 adds an `otel` service (grafana/otel-lgtm) here for the local
+  # observability stack.

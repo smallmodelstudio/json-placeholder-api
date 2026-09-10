@@ -15,11 +15,22 @@ describe('Health (e2e)', () => {
     await app.close();
   });
 
-  it('reports healthy when the upstream ping succeeds', async () => {
+  it('/health/live reports healthy without touching the upstream', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/health/live')
+      .expect(200);
+
+    const body = response.body as {
+      data: { status: string; info?: Record<string, unknown> };
+    };
+    expect(body.data.status).toBe('ok');
+  });
+
+  it('/health/ready reports healthy when the upstream ping succeeds', async () => {
     mockUpstream().get('/posts/1').reply(200, { id: 1 });
 
     const response = await request(app.getHttpServer())
-      .get('/health')
+      .get('/health/ready')
       .expect(200);
 
     const body = response.body as {
@@ -29,11 +40,11 @@ describe('Health (e2e)', () => {
     expect(body.data.info).toHaveProperty('upstream');
   });
 
-  it('reports unhealthy with 503 when the upstream ping fails', async () => {
+  it('/health/ready reports unhealthy with 503 when the upstream ping fails', async () => {
     mockUpstream().get('/posts/1').reply(500);
 
     const response = await request(app.getHttpServer())
-      .get('/health')
+      .get('/health/ready')
       .expect(503);
 
     const body = response.body as { statusCode: number };

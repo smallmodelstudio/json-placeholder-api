@@ -133,6 +133,73 @@ and only Phase 1's Vitest suite was a real prerequisite.
   *not* cached across two calls), `GET /docs` (200, Swagger UI renders with
   no extra `@fastify/static` wiring needed beyond the dependency itself).
 
+### Phase 5 — Docker
+
+Implemented out of phase-number order, at explicit request — Phase 3
+(Pagination) is still not started; Docker didn't depend on it (see
+`PLAN.md`'s "Phase ordering and why": pagination is independent feature
+work, not a platform prerequisite).
+
+- `Dockerfile`: three stages — `deps` (`npm ci`), `build` (`nest build`
+  then `npm prune --omit=dev` to strip devDependencies out of
+  `node_modules`), `runtime` (nothing copied in but `dist/`, the pruned
+  `node_modules/`, and `package.json`). Base image is `node:24-slim`, not
+  the Node 22 LTS `PLAN.md` sketched — `.nvmrc` already pins `v24.16.0`,
+  and matching the dev environment took precedence over the stale
+  recommendation.
+- Non-root: runs as the `node` user the base image already provides
+  (uid/gid 1000); runtime-stage `COPY --chown=node:node` so it can
+  actually read what was copied in as root.
+- Signal handling: `dumb-init` (via `apt-get`) as `ENTRYPOINT`, `CMD
+  ["node", "dist/src/main.js"]`. Chose baking it into the image over
+  Compose's `init: true` — this image is also what Phase 6 deploys into
+  Kubernetes, which has no equivalent flag, so the image needs to own its
+  own PID 1 regardless of orchestrator.
+- `HEALTHCHECK` shells out to `node -e` hitting `/health/live` over
+  `node:http` — no `curl`/`wget` needed on `-slim`.
+- **Health endpoints split** (`src/health/health.controller.ts`): the old
+  bare `GET /health` (ping-the-upstream) is gone, replaced by
+  `GET /health/live` (no indicators — Terminus's `check([])`, never fails
+  on upstream trouble) and `GET /health/ready` (same upstream ping the old
+  route did). `/health/startup` stayed optional/unimplemented — nothing
+  in `PLAN.md`'s Phase 6 sketch wires a startup probe. Updated
+  `health.controller.spec.ts`, `test/e2e/health.e2e.spec.ts`, and
+  `test/e2e/throttle.e2e.spec.ts` (which exercised the old route to prove
+  the throttle exemption). `HttpCacheInterceptor`'s `/health` exclusion
+  and the Swagger tag needed no code change — the interceptor already
+  matched on a `startsWith('/health')` prefix.
+- Fixed `package.json`'s `start:prod`, which ran `node dist/main` — the
+  actual compiled entrypoint is `dist/src/main.js`
+  (`nest-cli.json`'s `sourceRoot: src` nests build output under
+  `dist/src/`). Silently broken since before Phase 1; nothing had run it
+  until the Dockerfile needed the real path.
+- `docker-compose.yml`: single `app` service building the same
+  `Dockerfile`, `.env.example` as `env_file` (copy to `.env` and edit for
+  local overrides — gitignored), left a comment marking where Phase 8
+  adds an `otel` service.
+- `.dockerignore`: excludes `node_modules`/`dist`/`coverage` (rebuilt
+  fresh in-image), `.git`, `test/`, `*.md`, `.env*` (config is supplied at
+  `docker run`/compose time, never baked in).
+- Verified directly with `docker build` + `docker run`: image size 451MB
+  (Nest + Swagger + Terminus's dependency tree on `-slim`, not bloat —
+  `npm prune --omit=dev` confirmed working); `process.getuid()` inside the
+  container → 1000, confirming non-root; `docker stop` on a running
+  container logged `AppModule`'s `onApplicationShutdown` and exited in
+  ~0.25s, confirming `dumb-init` forwards `SIGTERM` to the real process
+  rather than the container hanging to the orchestrator's kill timeout;
+  `--env-file .env.example` verified end-to-end (`GET /posts/1`,
+  `GET /health/live`, `GET /health/ready` all correct). `docker compose
+  up` needed a second run on an unmapped port to confirm cleanly: this
+  sandbox already has an unrelated host process bound to `0.0.0.0:3000`,
+  so `localhost:3000` from the host resolved to that process rather than
+  Docker's forwarded port — confirmed not a `docker-compose.yml` defect by
+  hitting the same route from inside the container (200) and via a
+  container run on a free host port (200). Full suite still green (261
+  passed, 3 contract skipped) after the health-endpoint split; `npm run
+  lint` (0 errors, 96 pre-existing `no-unsafe-argument` warnings — one
+  more than before, from the new e2e assertions) and `npm run typecheck`
+  both clean.
+
 ## Current Phase
 
 ### Phase 3 — Pagination
@@ -140,7 +207,8 @@ and only Phase 1's Vitest suite was a real prerequisite.
 Not started. See `PLAN.md` for the upstream pagination semantics, the
 `getWithMeta()` refactor, and the four call sites (DTOs, interceptor,
 nested routes, Swagger) it touches. No longer a prerequisite for Phase 4
-(now complete) — the two phases were independent.
+or Phase 5 (both complete) — pagination was always independent feature
+work, not a platform prerequisite.
 
 ## Active Context Architecture
 

@@ -26,16 +26,16 @@ describe('Rate limiting (e2e)', () => {
     );
   });
 
-  it('exempts /health from the rate limit', async () => {
+  it('exempts /health/ready from the rate limit', async () => {
     await withEnvOverrides(
       { THROTTLE_LIMIT: '1', THROTTLE_TTL_MS: '10000' },
       async () => {
         app = await createTestApp();
         mockUpstream().get('/posts/1').times(3).reply(200, { id: 1 });
 
-        await request(app.getHttpServer()).get('/health').expect(200);
-        await request(app.getHttpServer()).get('/health').expect(200);
-        await request(app.getHttpServer()).get('/health').expect(200);
+        await request(app.getHttpServer()).get('/health/ready').expect(200);
+        await request(app.getHttpServer()).get('/health/ready').expect(200);
+        await request(app.getHttpServer()).get('/health/ready').expect(200);
       },
     );
   });

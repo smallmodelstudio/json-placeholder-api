@@ -364,6 +364,14 @@ deps) → `runtime`. Node 22 LTS on `-slim` or distroless. Non-root `USER node`.
 handling via `--init` or `dumb-init`, which matters because `app.enableShutdownHooks()`
 is already wired in `app.module.ts` and you want it to actually fire.
 
+**What actually happened:** used `node:24-slim`, not Node 22 LTS — `.nvmrc` already
+pins `v24.16.0` (Node 24 became the current LTS line after this plan was written), and
+matching the dev environment beat the stale recommendation. Went with `dumb-init`
+baked into the runtime image (via `apt-get`) rather than Compose's `init: true`:
+`init: true` only helps under Compose/`docker run --init`, and this same image is the
+one Phase 6 deploys into Kubernetes, where there's no equivalent flag — the image
+needs to carry its own PID 1 regardless of orchestrator.
+
 ### The health-check finding
 
 `HealthController` pings the upstream. That is correct for **readiness** and wrong for
@@ -374,13 +382,36 @@ pod in a loop for a fault the pod cannot fix. Split before Phase 6:
 - `GET /health/ready` — upstream reachable. Pod is removed from the Service on failure.
 - `GET /health/startup` — optional, generous budget for cold start.
 
+**What actually happened:** implemented `/health/live` and `/health/ready` only;
+`/health/startup` stayed optional and Phase 6's plan only ever wired liveness and
+readiness probes, so there was no consumer for it yet. The old bare `GET /health`
+(readiness behaviour) was removed rather than kept as an alias — `PLAN.md` said to
+split it, and a lingering third variant would just be one more thing to keep in sync.
+
 ### Work
 
-- [ ] Multi-stage `Dockerfile` + `.dockerignore`.
-- [ ] Split the health endpoints; update `health.controller.spec.ts` and
-      `test/health.e2e-spec.ts`.
-- [ ] `docker-compose.yml` for the local loop (app + later the observability stack).
-- [ ] Verify: image size, non-root, `SIGTERM` drains cleanly, env via `--env-file`.
+- [x] Multi-stage `Dockerfile` + `.dockerignore`.
+- [x] Split the health endpoints; update `health.controller.spec.ts` and
+      `test/e2e/health.e2e.spec.ts` (also `test/e2e/throttle.e2e.spec.ts`, which
+      exercised the old bare `/health` route to assert the throttle exemption).
+- [x] `docker-compose.yml` for the local loop (app + later the observability stack).
+- [x] Verify: image size, non-root, `SIGTERM` drains cleanly, env via `--env-file`.
+      (451MB — a Nest + Swagger + Terminus dependency tree on `-slim`, not a bloated
+      build; `npm prune --omit=dev` in the build stage keeps devDependencies out.
+      `USER node` confirmed via `process.getuid()` → 1000. `docker stop` on a running
+      container logged `AppModule`'s `onApplicationShutdown` and exited in ~0.25s,
+      confirming `dumb-init` forwards `SIGTERM` to the real PID rather than the
+      container hanging until the orchestrator's kill timeout. `--env-file
+      .env.example` verified against a real `docker run`.) Also fixed
+      `package.json`'s `start:prod` script, which pointed at `dist/main` — the
+      actual compiled entrypoint is `dist/src/main.js` (`nest-cli.json`'s
+      `sourceRoot: src` nests build output under `dist/src/`); this had been
+      silently broken since before Phase 1 since nothing ran it. `docker-compose up`
+      itself needed a second, unmapped-port run to verify cleanly: this sandbox
+      already has an unrelated host process bound to `0.0.0.0:3000`, so `localhost:3000`
+      from the host resolved to that process instead of Docker's forwarded port —
+      not a defect in `docker-compose.yml`, confirmed by hitting the same route from
+      inside the container (200) and via a container run on a free host port (200).
 
 ---
 
