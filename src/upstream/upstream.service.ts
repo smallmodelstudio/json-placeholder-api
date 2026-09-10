@@ -11,6 +11,7 @@ import {
   UpstreamException,
 } from '../common/exceptions/upstream.exception';
 import { UpstreamRequestOptions } from './interfaces/upstream-request.interface';
+import { MetricsService } from '../common/metrics/metrics.service';
 
 @Injectable()
 export class UpstreamService {
@@ -20,6 +21,7 @@ export class UpstreamService {
   constructor(
     private readonly httpService: HttpService,
     configService: ConfigService<AppConfig, true>,
+    private readonly metrics: MetricsService,
   ) {
     this.maxRetries = configService.get('http.maxRetries', { infer: true });
   }
@@ -120,6 +122,7 @@ export class UpstreamService {
     this.logger.warn(
       `Retrying ${this.describe(config)} (attempt ${retryCount}/${this.maxRetries}) after ${backoffMs}ms`,
     );
+    this.metrics.recordUpstreamRetry();
     return timer(backoffMs);
   }
 

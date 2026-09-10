@@ -2,6 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../../base
+  - otel.yaml
 
 # Push from the host to localhost:5000 (the registry's published port),
 # but the in-cluster image ref must use the k3d-managed hostname — the
@@ -20,6 +21,9 @@ patches:
   # No LOG_LEVEL knob exists in src/config — NODE_ENV=development is the
   # only "debug logging" lever the app actually has (Nest's default logger
   # doesn't gate on it further, but it's honest to what's wired up).
+  # OTEL_EXPORTER_OTLP_ENDPOINT points at otel.yaml's Service, same
+  # namespace — short DNS name resolves fine, no need for the
+  # *.default.svc.cluster.local FQDN.
   - target:
       kind: ConfigMap
       name: json-placeholder-api-config
@@ -27,6 +31,9 @@ patches:
       - op: replace
         path: /data/NODE_ENV
         value: development
+      - op: replace
+        path: /data/OTEL_EXPORTER_OTLP_ENDPOINT
+        value: http://otel-lgtm:4318
 
   - target:
       kind: Ingress

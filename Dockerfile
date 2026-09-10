@@ -42,4 +42,8 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD node -e "require('node:http').get('http://127.0.0.1:'+(process.env.PORT||3000)+'/health/live',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["node", "dist/src/main.js"]
+# --import loads instrumentation.ts's compiled output before anything else,
+# which is required for OTel's auto-instrumentation patches to apply (see
+# instrumentation.ts's own header comment) — importing it from within
+# main.ts would be too late.
+CMD ["node", "--import", "./dist/src/instrumentation.js", "dist/src/main.js"]

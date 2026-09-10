@@ -16,6 +16,10 @@ modules (posts, users, comments, todos, albums, photos) proxying
 shared `UpstreamService`, with a `{ data, meta }` success envelope, a global error
 envelope, correlation IDs, caching, throttling, retries, timeouts, Swagger, and
 Terminus health checks. Unit tests colocated in `src/`, e2e + contract tests in `test/`.
+Dockerized, deployable to a local k3d cluster via Kustomize, with pipeline-as-code
+for Harness CI/CD and OpenTelemetry traces/metrics/logs (structured via `nestjs-pino`,
+correlated with `correlationId`) exportable to any OTLP backend — `grafana/otel-lgtm`
+locally by default.
 
 ---
 
@@ -597,16 +601,63 @@ instrumentation is the correct default regardless of the eventual choice.
 | Dynatrace trial / Playground | Free for 15 days | Point the OTLP endpoint at it; evaluate on real data. |
 | Grafana Cloud free tier | Free, persistent | If you want hosted, alongside the k8s work. |
 
+**What actually happened:** the sketch above held up well, with two real gaps this
+plan didn't anticipate:
+
+- **`getNodeAutoInstrumentations()` already bundles `instrumentation-http` and
+  `instrumentation-nestjs-core`** (and `instrumentation-pino`) — registering them
+  separately alongside it would just double-instrument. `instrumentation.ts` calls
+  `getNodeAutoInstrumentations()` once, with filesystem instrumentation disabled
+  (noisy, irrelevant to a proxy) and pino log-*sending* disabled (log *correlation* —
+  `trace_id`/`span_id` injected into every pino line whenever a span is active — stays
+  on; it's automatic, no manual `mixin` needed, and is what makes "unify
+  `correlationId` with the trace id" actually land: the response envelope, the access
+  log, and the trace all end up carrying the identical value with zero extra plumbing
+  beyond `correlation-id.hook.ts` preferring `trace.getActiveSpan()?.spanContext().traceId`
+  over `randomUUID()` when a span exists).
+- **`pino-pretty` is a devDependency, pruned from the production image** by
+  `npm prune --omit=dev` (Dockerfile) — gating the pretty-transport choice on
+  `NODE_ENV` (as an early draft did) is a trap, because `overlays/local`'s ConfigMap
+  sets `NODE_ENV=development` on that same pruned production image just to bump the
+  log level, and pino's transport loader throws *synchronously* if the target module
+  can't be resolved, crash-looping the pod. Fixed by gating on whether `pino-pretty`
+  actually resolves (`require.resolve` in a try/catch) instead of on `NODE_ENV` —
+  found by deploying to the real k3d cluster and watching it `CrashLoopBackOff`, not
+  by any test, since every test runs from source with all devDependencies present.
+
+Verified for real, not just read from docs: `docker compose up --build` produces a
+trace in Tempo, custom metrics in Prometheus, and `trace_id`/`span_id`-correlated JSON
+log lines, all inspected directly via `docker compose exec otel curl
+localhost:3200/api/search` and `localhost:9090/api/v1/query`. The same held after
+pushing the image to the Phase 6 k3d cluster and applying `overlays/local` (which now
+also deploys `otel-lgtm` — see the Work item below) — traces, the custom metrics, and a
+trace-id `correlationId` all confirmed through Traefik and via `kubectl exec` into the
+`otel-lgtm` pod. One unrelated sandbox artifact surfaced along the way: a leftover
+`node dist/src/main` process from an earlier session had port 3000 on the *host*
+already bound, ahead of Docker's own port-forward for it — the same class of quirk
+Phase 5's PROGRESS.md already flagged, worked around the same way there (verify via
+`docker compose exec`/from inside the container rather than fighting the host's
+`localhost:3000`), not a defect in anything built this phase.
+
 ### Work
 
-- [ ] `instrumentation.ts` + `--import` wiring in Dockerfile and npm scripts.
-- [ ] `otel-lgtm` in `docker-compose.yml`; confirm a full trace end to end.
-- [ ] `nestjs-pino` + trace correlation; unify with `correlationId`.
-- [ ] Custom metrics for cache / retry / throttle.
-- [ ] Deploy the collector into k3d; scrape from the Phase 6 cluster.
+- [x] `instrumentation.ts` + `--import` wiring in Dockerfile and npm scripts.
+- [x] `otel-lgtm` in `docker-compose.yml`; confirm a full trace end to end.
+- [x] `nestjs-pino` + trace correlation; unify with `correlationId`.
+- [x] Custom metrics for cache / retry / throttle.
+- [x] Deploy the collector into k3d; scrape from the Phase 6 cluster.
 - [ ] Dynatrace trial: switch `OTEL_EXPORTER_OTLP_ENDPOINT`, spend the 15 days
       evaluating rather than instrumenting.
+      (Not done — needs a real Dynatrace account this environment can't
+      sign up for, same category of gap as Phase 7's Harness account. The
+      instrumentation is vendor-neutral OTLP specifically so this is a
+      config change whenever a trial exists, not a rework.)
 - [ ] Feed metrics back into Harness deployment verification (Phase 7).
+      (Not done — Phase 7's own CD smoke-test step is a plain curl, not
+      Harness's metrics-based Continuous Verification, because that needs a
+      real Harness tenant to configure against; still blocked on the same
+      "no real account" gap Phase 7 documented, now with real metrics on
+      the other side of it once that tenant exists.)
 
 ---
 

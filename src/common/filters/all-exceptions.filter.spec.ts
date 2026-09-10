@@ -14,21 +14,25 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { ThrottlerException } from '@nestjs/throttler';
 import {
   UpstreamErrorType,
   UpstreamException,
 } from '../exceptions/upstream.exception';
+import { MetricsService } from '../metrics/metrics.service';
 import { AllExceptionsFilter } from './all-exceptions.filter';
 
 describe('AllExceptionsFilter', () => {
   let filter: AllExceptionsFilter;
+  let metrics: MetricsService;
   let sendMock: Mock<(response: Record<string, unknown>) => void>;
   let statusMock: Mock;
   let host: ArgumentsHost;
   let errorSpy: MockInstance;
 
   beforeEach(() => {
-    filter = new AllExceptionsFilter();
+    metrics = new MetricsService();
+    filter = new AllExceptionsFilter(metrics);
     sendMock = vi.fn<(response: Record<string, unknown>) => void>();
     statusMock = vi.fn().mockReturnValue({ send: sendMock });
     errorSpy = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
@@ -159,5 +163,21 @@ describe('AllExceptionsFilter', () => {
     filter.catch(new Error('boom'), host);
 
     expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it('records a throttle-rejection metric for a ThrottlerException', () => {
+    const recordSpy = vi.spyOn(metrics, 'recordThrottleRejection');
+
+    filter.catch(new ThrottlerException(), host);
+
+    expect(recordSpy).toHaveBeenCalledOnce();
+  });
+
+  it('does not record a throttle-rejection metric for other exceptions', () => {
+    const recordSpy = vi.spyOn(metrics, 'recordThrottleRejection');
+
+    filter.catch(new NotFoundException(), host);
+
+    expect(recordSpy).not.toHaveBeenCalled();
   });
 });

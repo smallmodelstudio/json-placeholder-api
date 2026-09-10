@@ -12,6 +12,24 @@ services:
       - .env.example
     environment:
       NODE_ENV: production
+      # Service DNS name on the compose network, not localhost — the app
+      # and the collector are different containers. instrumentation.ts
+      # falls back to localhost:4318 when this is unset, which is right
+      # for `npm run start:prod` outside Docker but wrong in here.
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel:4318
+      OTEL_SERVICE_NAME: json-placeholder-api
+    depends_on:
+      - otel
     restart: unless-stopped
-  # Phase 8 adds an `otel` service (grafana/otel-lgtm) here for the local
-  # observability stack.
+  # grafana/otel-lgtm bundles an OTel Collector plus Grafana, Tempo (traces),
+  # Prometheus (metrics), and Loki (logs), pre-wired together — the
+  # "recommended default" backend from PLAN.md's Phase 8, free and local.
+  # Grafana's own UI runs on 3000 inside the container, same as the app, so
+  # it's remapped to 3001 on the host to avoid a collision.
+  otel:
+    image: grafana/otel-lgtm:0.32.1
+    ports:
+      - '3001:3000' # Grafana UI: http://localhost:3001 (admin/admin)
+      - '4317:4317' # OTLP gRPC
+      - '4318:4318' # OTLP HTTP
+    restart: unless-stopped

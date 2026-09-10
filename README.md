@@ -159,6 +159,62 @@ approval). See `.harness/README.md` for the setup checklist — a Harness
 account, a Delegate installed into k3d, and a handful of connectors are
 required before any of it runs, none of which this repo can provide for you.
 
+### Observability
+
+The app emits OpenTelemetry traces, metrics, and (via
+[nestjs-pino](https://github.com/iamolegga/nestjs-pino)) structured JSON
+logs — vendor-neutral, so any OTLP-speaking backend works. `src/instrumentation.ts`
+does the actual instrumentation; it has to be loaded with `node --import`
+*before* Nest (and therefore Axios/`http`) is required, or OTel's
+auto-instrumentation patches miss their target. `npm run start:prod` and the
+Dockerfile's `CMD` both wire this up already; `npm run start`/`start:dev`
+don't (see the file's own header comment for why that's a deliberate scope
+cut, not an oversight).
+
+**Trace/log correlation:** the response envelope's `correlationId`
+(`src/common/hooks/correlation-id.hook.ts`) is the active span's OTel trace
+id whenever one exists, and every pino log line gets `trace_id`/`span_id`
+fields automatically (via `@opentelemetry/instrumentation-pino`) — so a
+response, its access-log line, and its trace all carry the same identifier
+without any manual plumbing. A client-supplied `x-correlation-id` header is
+still echoed back as-is (existing contract), so the two can legitimately
+diverge in that one case.
+
+**Custom metrics**, on top of what auto-instrumentation gives you for free
+(request rate/latency/error-rate, per route and status code):
+
+| Metric | What it means |
+|---|---|
+| `http_cache_lookups_total{result="hit\|miss"}` | `HttpCacheInterceptor` lookups |
+| `upstream_retries_total` | Retries `UpstreamService` issued against JSONPlaceholder |
+| `throttle_rejections_total` | Requests `ThrottlerGuard` rejected with 429 |
+
+**Local backend** — [`grafana/otel-lgtm`](https://github.com/grafana/docker-otel-lgtm),
+one container bundling Grafana + Tempo (traces) + Prometheus (metrics) +
+Loki (logs), wired together already:
+
+```bash
+$ docker compose up --build
+# Grafana: http://localhost:3001 (admin/admin) — Explore → Tempo/Prometheus/Loki
+```
+
+**In k3d**, the same image is deployed by `overlays/local` alongside the app
+(`k8s/overlays/local/otel.yaml`), with `OTEL_EXPORTER_OTLP_ENDPOINT` patched
+to point at it in-cluster:
+
+```bash
+$ kubectl apply -k k8s/overlays/local
+$ kubectl port-forward svc/otel-lgtm 3001:3000
+# Grafana: http://localhost:3001
+```
+
+**Not done, and why:** PLAN.md's Phase 8 also lists a Dynatrace trial (needs
+a real account signup this repo can't do for you — evaluate it by pointing
+`OTEL_EXPORTER_OTLP_ENDPOINT` at it once you have one; nothing else changes)
+and feeding these metrics into Harness's Continuous Verification (needs the
+real Harness tenant Phase 7 is still waiting on). Both are one-account away,
+not one-PR away.
+
 ## Resources
 
 Check out a few resources that may come in handy when working with NestJS:

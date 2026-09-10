@@ -8,10 +8,12 @@ import {
 } from '@nestjs/common';
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { STATUS_CODES } from 'node:http';
+import { ThrottlerException } from '@nestjs/throttler';
 import {
   UpstreamErrorType,
   UpstreamException,
 } from '../exceptions/upstream.exception';
+import { MetricsService } from '../metrics/metrics.service';
 
 interface ResolvedError {
   statusCode: number;
@@ -33,6 +35,8 @@ const SERVER_ERROR_THRESHOLD: number = HttpStatus.INTERNAL_SERVER_ERROR;
 @Catch()
 export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger('ExceptionFilter');
+
+  constructor(private readonly metrics: MetricsService) {}
 
   catch(exception: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
@@ -59,6 +63,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
   }
 
   private resolve(exception: unknown): ResolvedError {
+    if (exception instanceof ThrottlerException) {
+      this.metrics.recordThrottleRejection();
+    }
+
     if (exception instanceof UpstreamException) {
       return this.resolveUpstreamException(exception);
     }

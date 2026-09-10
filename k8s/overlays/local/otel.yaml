@@ -1,0 +1,61 @@
+# Local-only: the same grafana/otel-lgtm all-in-one image docker-compose.yml
+# uses, deployed into k3d so PLAN.md's Phase 8 ask ("deploy the collector
+# into k3d; scrape from the cluster") has something real to scrape from
+# in-cluster pods, not just the docker-compose loop. Deliberately lives in
+# overlays/local rather than k8s/base — there's no equivalent backend for
+# overlays/prod yet (see configmap.yaml's OTEL_EXPORTER_OTLP_ENDPOINT
+# comment), so it isn't shared kustomization.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-lgtm
+  labels:
+    app: otel-lgtm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-lgtm
+  template:
+    metadata:
+      labels:
+        app: otel-lgtm
+    spec:
+      containers:
+        - name: otel-lgtm
+          image: grafana/otel-lgtm:0.32.1
+          ports:
+            - name: grafana
+              containerPort: 3000
+            - name: otlp-grpc
+              containerPort: 4317
+            - name: otlp-http
+              containerPort: 4318
+          # Grafana + Tempo + Loki + Prometheus in one container needs more
+          # headroom than the app itself (k8s/base/deployment.yaml) — sized
+          # for a single-node k3d dev cluster, not a production ingest rate.
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 1500Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-lgtm
+spec:
+  selector:
+    app: otel-lgtm
+  ports:
+    - name: grafana
+      port: 3000
+      targetPort: grafana
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http

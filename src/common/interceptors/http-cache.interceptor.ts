@@ -1,9 +1,26 @@
-import { CacheInterceptor } from '@nestjs/cache-manager';
-import { ExecutionContext, Injectable } from '@nestjs/common';
-import { FastifyRequest } from 'fastify';
+import { CACHE_MANAGER, CacheInterceptor } from '@nestjs/cache-manager';
+import {
+  CallHandler,
+  ExecutionContext,
+  Inject,
+  Injectable,
+} from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import type { Cache } from 'cache-manager';
+import { FastifyReply, FastifyRequest } from 'fastify';
+import { Observable } from 'rxjs';
+import { MetricsService } from '../metrics/metrics.service';
 
 @Injectable()
 export class HttpCacheInterceptor extends CacheInterceptor {
+  constructor(
+    @Inject(CACHE_MANAGER) cacheManager: Cache,
+    reflector: Reflector,
+    private readonly metrics: MetricsService,
+  ) {
+    super(cacheManager, reflector);
+  }
+
   // A stale "ok" from the cache would defeat the point of a liveness probe,
   // so /health is excluded here rather than relying on callers to remember
   // not to cache it. Keyed on the route pattern (not request.url, which
@@ -18,5 +35,22 @@ export class HttpCacheInterceptor extends CacheInterceptor {
       return undefined;
     }
     return super.trackBy(context);
+  }
+
+  // The base CacheInterceptor already sets an X-Cache: HIT/MISS response
+  // header (setHeadersWhenHttp) as a side effect of its own lookup, before
+  // returning — reading it back here is cheaper and more honest than a
+  // second, separate cacheManager.get() just to observe hit/miss.
+  override async intercept(
+    context: ExecutionContext,
+    next: CallHandler,
+  ): Promise<Observable<unknown>> {
+    const observable = await super.intercept(context, next);
+    const reply = context.switchToHttp().getResponse<FastifyReply>();
+    const cacheHeader = reply.getHeader('X-Cache');
+    if (cacheHeader !== undefined) {
+      this.metrics.recordCacheLookup(cacheHeader === 'HIT' ? 'hit' : 'miss');
+    }
+    return observable;
   }
 }

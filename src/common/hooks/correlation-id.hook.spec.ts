@@ -1,5 +1,8 @@
-import { describe, it, beforeEach, expect, vi, Mock } from 'vitest';
+import { describe, it, beforeEach, afterAll, expect, vi, Mock } from 'vitest';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { context, trace } from '@opentelemetry/api';
+import { AsyncHooksContextManager } from '@opentelemetry/context-async-hooks';
+import { BasicTracerProvider } from '@opentelemetry/sdk-trace-base';
 import {
   CORRELATION_ID_HEADER,
   registerCorrelationIdHook,
@@ -78,5 +81,50 @@ describe('registerCorrelationIdHook', () => {
 
     expect(request.correlationId).not.toBe('   ');
     expect(request.correlationId.trim().length).toBeGreaterThan(0);
+  });
+
+  describe('with an active OTel span', () => {
+    // The API package's default ContextManager is a no-op, so
+    // context.with() below wouldn't actually make the span "active" — it'd
+    // just call the callback directly — without a real one registered, the
+    // same way instrumentation.ts's NodeSDK.start() registers one for the
+    // running app.
+    const contextManager = new AsyncHooksContextManager().enable();
+    context.setGlobalContextManager(contextManager);
+    afterAll(() => {
+      context.disable();
+    });
+
+    const provider = new BasicTracerProvider();
+    const tracer = provider.getTracer('correlation-id.hook.spec');
+
+    it('uses the active span trace id as the generated correlation id', () => {
+      const request = { headers: {} } as unknown as FastifyRequest;
+      const { reply } = makeReply();
+      const span = tracer.startSpan('incoming request');
+
+      context.with(trace.setSpan(context.active(), span), () => {
+        onRequest(request, reply, vi.fn());
+      });
+      span.end();
+
+      expect(request.correlationId).toBe(span.spanContext().traceId);
+    });
+
+    it('still honours a client-supplied header over the active span', () => {
+      const request = {
+        headers: { [CORRELATION_ID_HEADER]: 'incoming-id-123' },
+      } as unknown as FastifyRequest;
+      const { reply } = makeReply();
+      const span = tracer.startSpan('incoming request');
+
+      context.with(trace.setSpan(context.active(), span), () => {
+        onRequest(request, reply, vi.fn());
+      });
+      span.end();
+
+      expect(request.correlationId).toBe('incoming-id-123');
+      expect(request.correlationId).not.toBe(span.spanContext().traceId);
+    });
   });
 });

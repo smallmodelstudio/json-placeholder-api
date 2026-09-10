@@ -9,6 +9,7 @@ import {
   UpstreamErrorType,
   UpstreamException,
 } from '../common/exceptions/upstream.exception';
+import { MetricsService } from '../common/metrics/metrics.service';
 
 /**
  * @nestjs/axios's HttpService.request() wraps each call in `new Observable(...)`,
@@ -35,6 +36,7 @@ function respondWith<T>(...emissions: Observable<T>[]) {
 
 describe('UpstreamService', () => {
   let service: UpstreamService;
+  let metrics: MetricsService;
   let httpService: { request: Mock };
 
   const makeAxiosResponse = <T>(data: T): AxiosResponse<T> =>
@@ -65,6 +67,7 @@ describe('UpstreamService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UpstreamService,
+        MetricsService,
         { provide: HttpService, useValue: httpService },
         {
           provide: ConfigService,
@@ -74,6 +77,7 @@ describe('UpstreamService', () => {
     }).compile();
 
     service = module.get(UpstreamService);
+    metrics = module.get(MetricsService);
   });
 
   it('returns response data on success', async () => {
@@ -150,10 +154,13 @@ describe('UpstreamService', () => {
     );
     httpService.request.mockReturnValueOnce(source);
 
+    const recordRetrySpy = vi.spyOn(metrics, 'recordUpstreamRetry');
+
     const result = await service.get<{ id: number }>('/posts/1');
 
     expect(result).toEqual({ id: 1 });
     expect(attempts).toHaveBeenCalledTimes(2);
+    expect(recordRetrySpy).toHaveBeenCalledTimes(1);
   });
 
   it('does not retry a 4xx response', async () => {

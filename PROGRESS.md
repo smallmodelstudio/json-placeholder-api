@@ -323,17 +323,117 @@ environment can create non-interactively.
   names/branch, not against a live pipeline run. `README.md` gained a short
   "CI/CD (Harness)" subsection pointing at `.harness/README.md`.
 
+### Phase 8 — Observability
+
+Implemented out of phase-number order (Phase 3, Pagination, is still not
+started — same rationale as Phases 4-7: it was never a prerequisite), at
+explicit request.
+
+- `src/instrumentation.ts`: `NodeSDK` with `getNodeAutoInstrumentations()`
+  (which already bundles `instrumentation-http` and `instrumentation-nestjs-core`
+  — registering them again separately, as `PLAN.md`'s original sketch
+  implied, would double-instrument), filesystem instrumentation disabled
+  (noisy, irrelevant to a proxy), and pino log-*sending* disabled via
+  `instrumentation-pino`'s config (log *correlation* — injecting
+  `trace_id`/`span_id` into pino output — stays on; PLAN.md's ask was
+  trace/metric export plus correlated logs, not a full OTLP logs pipeline).
+  `OTLPTraceExporter`/`OTLPMetricExporter` take no explicit `url`, relying
+  entirely on the standard `OTEL_EXPORTER_OTLP_ENDPOINT` env var (default
+  `http://localhost:4318`) — docker-compose.yml and k8s both override it to
+  point at their own collector.
+- **Loaded via `node --import ./dist/src/instrumentation.js`**, not an
+  import inside `main.ts` — `package.json`'s `start:prod` and the
+  Dockerfile's `CMD` both do this; `start`/`start:dev` (`nest start`) don't,
+  since wiring `--import` through `nest start`'s dev-mode compiler wasn't
+  worth the complexity for a phase whose deliverable is the deployed path.
+- **`correlationId` unified with the OTel trace id**
+  (`src/common/hooks/correlation-id.hook.ts`): when no client-supplied
+  `x-correlation-id` header exists, the generated id is now
+  `trace.getActiveSpan()?.spanContext().traceId ?? randomUUID()` rather than
+  always `randomUUID()`. `instrumentation-http` starts a span for the
+  incoming request before Fastify's own `onRequest` hooks run, so the span
+  is already active by the time this hook reads it. A client-supplied
+  header is still honoured as-is (existing contract, existing e2e
+  coverage) — the two can legitimately diverge in that one case.
+- **`nestjs-pino`** replaces Nest's console logger for structured JSON.
+  `AppModule` registers `LoggerModule.forRootAsync`; `main.ts` calls
+  `app.useLogger(app.get(Logger))` with `bufferLogs: true` on
+  `NestFactory.create` so Nest's own bootstrap-time log lines get
+  pino-formatted too instead of leaking out through the console logger
+  first. Not wired into `test/support/create-test-app.ts` — e2e tests don't
+  need JSON log output, and `AppModule`'s own factory sets pino's level to
+  `silent` when `NODE_ENV=test` regardless.
+  - **Real bug, found only by deploying to the actual k3d cluster**:
+    `pino-pretty` is a devDependency, stripped from the production image by
+    `npm prune --omit=dev` (Dockerfile). An early version chose the
+    pretty-vs-JSON transport based on `NODE_ENV !== 'production'` — which
+    crash-loops the pod, because `overlays/local`'s ConfigMap sets
+    `NODE_ENV=development` on that same pruned production image (just to
+    get the `debug` log level), and pino's transport loader throws
+    *synchronously* if the target module can't be resolved. No test caught
+    this — every test runs from source with all devDependencies installed.
+    Fixed by gating on whether `pino-pretty` actually resolves
+    (`require.resolve` in a try/catch, `isPinoPrettyAvailable()` in
+    `app.module.ts`) instead of on `NODE_ENV`.
+- **Custom metrics** via a small `MetricsService`
+  (`src/common/metrics/metrics.service.ts`, global `MetricsModule`), all
+  OTel `Counter`s: `http_cache_lookups_total{result="hit|miss"}`
+  (`HttpCacheInterceptor`, read off the `X-Cache` header the base
+  `CacheInterceptor` already sets rather than a second `cacheManager.get()`
+  just to observe hit/miss), `upstream_retries_total` (`UpstreamService`'s
+  `retryDelay()`), `throttle_rejections_total` (`AllExceptionsFilter`,
+  keyed on `exception instanceof ThrottlerException`).
+- `docker-compose.yml`: an `otel` service (`grafana/otel-lgtm`, pinned to
+  `0.32.1` — the actual latest tag at time of writing, not the `latest`
+  the repo's other pinned versions avoid), Grafana remapped to host `3001`
+  since the app already owns `3000`; the app service gets
+  `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel:4318` and `depends_on: [otel]`.
+- `k8s/overlays/local/otel.yaml`: the same `otel-lgtm` image deployed into
+  the Phase 6 k3d cluster (Deployment + Service, sized generously —
+  512Mi/1500Mi — since Grafana+Tempo+Prometheus+Loki in one container needs
+  more headroom than the app itself). Deliberately `overlays/local`-only,
+  not `k8s/base` — there's no equivalent backend for `overlays/prod` yet.
+  `k8s/base/configmap.yaml` gained `OTEL_EXPORTER_OTLP_ENDPOINT`/`OTEL_SERVICE_NAME`
+  keys (default `http://localhost:4318`, deliberately "wrong" for a real
+  cluster but non-fatal — the app degrades to failed OTLP exports rather
+  than refusing to start); `overlays/local` patches the endpoint to
+  `http://otel-lgtm:4318`.
+- Verified for real, twice: `docker compose up --build` (traces confirmed
+  in Tempo, custom + auto-instrumentation metrics confirmed in Prometheus,
+  JSON logs confirmed carrying matching `trace_id`/`correlationId`, all via
+  `docker compose exec otel curl localhost:3200/api/search` and
+  `localhost:9090/api/v1/query` — Grafana's own UI at `:3001` also
+  confirmed healthy), then again against the real k3d cluster after
+  pushing the built image to its registry and applying the updated
+  `overlays/local` (same three checks, via `kubectl exec` into the
+  `otel-lgtm` pod, plus a curl through Traefik showing a trace-id
+  `correlationId`). One sandbox artifact, not a code defect: a leftover
+  `node dist/src/main` process from an earlier session already held host
+  port 3000, ahead of Docker's own forwarded port for it — same class of
+  issue Phase 5's PROGRESS.md already flagged; worked around the same way
+  (verify via `docker compose exec`, not the host's `localhost:3000`).
+- `npm run build`, `npm run lint` (0 errors, 96 pre-existing warnings —
+  unchanged), `npm run typecheck` (clean), `npm run test:all` (271 passed,
+  3 contract skipped without the env flag; also verified green with
+  `RUN_CONTRACT_TESTS=1`).
+- **Not done** (see `PLAN.md`'s Work list for the "why", matching Phase 7's
+  precedent): the Dynatrace trial (needs a real account signup) and
+  feeding these metrics into Harness's Continuous Verification (needs the
+  real Harness tenant Phase 7 is already waiting on). Both are one-account
+  away, not one-PR away — the vendor-neutral OTLP instrumentation means
+  neither requires any rework once that account exists.
+
 ## Current Phase
 
 ### Phase 3 — Pagination
 
 Not started. See `PLAN.md` for the upstream pagination semantics, the
 `getWithMeta()` refactor, and the four call sites (DTOs, interceptor,
-nested routes, Swagger) it touches. No longer a prerequisite for any
-other phase — pagination was always independent feature work, not a
-platform prerequisite. Phase 8 (Observability) is next up otherwise, once
-a real Harness account exists to finish wiring Phase 7's connectors and
-Delegate.
+nested routes, Swagger) it touches. The only phase left in `PLAN.md` that
+doesn't need a real external account to finish — every other open item
+(Phase 7's Harness connectors/Delegate, Phase 8's Dynatrace trial and
+Harness Continuous Verification) is blocked on one that doesn't exist in
+this environment.
 
 ## Active Context Architecture
 
