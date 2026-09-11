@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach, expect } from 'vitest';
 import { INestApplication } from '@nestjs/common';
-import request from 'supertest';
 import { Post } from '../../src/modules/posts/entities/post.entity';
+import { api } from '../support/api';
 import { createTestApp } from '../support/create-test-app';
 import { SuccessEnvelope } from '../support/response-envelope';
 import { mockUpstream } from '../support/upstream-mock';
@@ -24,8 +24,8 @@ describe('Response caching (e2e)', () => {
     // succeeding proves the second one was served from cache.
     mockUpstream().get('/posts').reply(200, posts);
 
-    const first = await request(app.getHttpServer()).get('/posts').expect(200);
-    const second = await request(app.getHttpServer()).get('/posts').expect(200);
+    const first = await api(app).get('/posts').expect(200);
+    const second = await api(app).get('/posts').expect(200);
 
     expect((first.body as SuccessEnvelope<Post[]>).data).toEqual(posts);
     expect((second.body as SuccessEnvelope<Post[]>).data).toEqual(posts);
@@ -40,10 +40,8 @@ describe('Response caching (e2e)', () => {
     const post: Post = { id: 1, userId: 1, title: 't', body: 'b' };
     mockUpstream().get('/posts/1').reply(200, post);
 
-    await request(app.getHttpServer()).get('/posts/1').expect(200);
-    const second = await request(app.getHttpServer())
-      .get('/posts/1')
-      .expect(200);
+    await api(app).get('/posts/1').expect(200);
+    const second = await api(app).get('/posts/1').expect(200);
 
     expect((second.body as SuccessEnvelope<Post>).data).toEqual(post);
   });
@@ -54,12 +52,8 @@ describe('Response caching (e2e)', () => {
     mockUpstream().get('/posts').query({ userId: '1' }).reply(200, forUser1);
     mockUpstream().get('/posts').query({ userId: '2' }).reply(200, forUser2);
 
-    const responseUser1 = await request(app.getHttpServer())
-      .get('/posts?userId=1')
-      .expect(200);
-    const responseUser2 = await request(app.getHttpServer())
-      .get('/posts?userId=2')
-      .expect(200);
+    const responseUser1 = await api(app).get('/posts?userId=1').expect(200);
+    const responseUser2 = await api(app).get('/posts?userId=2').expect(200);
 
     expect((responseUser1.body as SuccessEnvelope<Post[]>).data).toEqual(
       forUser1,
@@ -81,8 +75,8 @@ describe('Response caching (e2e)', () => {
       .post('/posts', dto)
       .reply(201, created);
 
-    await request(app.getHttpServer()).post('/posts').send(dto).expect(201);
-    await request(app.getHttpServer()).post('/posts').send(dto).expect(201);
+    await api(app).post('/posts').send(dto).expect(201);
+    await api(app).post('/posts').send(dto).expect(201);
 
     expect(scope.isDone()).toBe(true);
   });

@@ -65,7 +65,7 @@ runs) and stub the upstream HTTP call with `nock` — no real network. Put the s
 ```ts
 import { describe, it, beforeEach, afterEach, expect } from 'vitest';
 import { INestApplication } from '@nestjs/common';
-import request from 'supertest';
+import { api } from '../support/api';
 import { createTestApp } from '../support/create-test-app';
 import { mockUpstream } from '../support/upstream-mock';
 import { SuccessEnvelope } from '../support/response-envelope';
@@ -84,7 +84,7 @@ describe('Foo (e2e)', () => {
   it('returns the list from upstream', async () => {
     mockUpstream().get('/foo').reply(200, [{ id: 1 }]);
 
-    const response = await request(app.getHttpServer()).get('/foo').expect(200);
+    const response = await api(app).get('/foo').expect(200);
 
     const body = response.body as SuccessEnvelope<Foo[]>;
     expect(body.data).toEqual([{ id: 1 }]);
@@ -94,6 +94,11 @@ describe('Foo (e2e)', () => {
 
 `test/support/` helpers:
 
+- **`api(app)`** — supertest bound to the booted app: `api(app).get('/foo')`.
+  Always go through this rather than `request(app.getHttpServer())` — Nest types
+  `getHttpServer()` as `any`, so the raw form trips
+  `@typescript-eslint/no-unsafe-argument` at every call site; `api()` holds the
+  single `as Server` assertion that keeps the specs clean.
 - **`createTestApp(options?)`** — boots `AppModule`. Pass `{ configure: (builder) =>
   builder.overrideProvider(...) }` if a test needs to swap a provider out entirely.
   For config *values* (timeouts, throttle limits), prefer `withEnvOverrides` below —

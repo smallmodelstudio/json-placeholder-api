@@ -1,8 +1,8 @@
 import { describe, it, beforeEach, afterEach, expect } from 'vitest';
 import { INestApplication } from '@nestjs/common';
-import request from 'supertest';
 import { Comment } from '../../src/modules/comments/entities/comment.entity';
 import { Post } from '../../src/modules/posts/entities/post.entity';
+import { api } from '../support/api';
 import { createTestApp } from '../support/create-test-app';
 import { ErrorEnvelope, SuccessEnvelope } from '../support/response-envelope';
 import { mockUpstream } from '../support/upstream-mock';
@@ -26,9 +26,7 @@ describe('Posts (e2e)', () => {
       ];
       mockUpstream().get('/posts').reply(200, posts);
 
-      const response = await request(app.getHttpServer())
-        .get('/posts')
-        .expect(200);
+      const response = await api(app).get('/posts').expect(200);
 
       const body = response.body as SuccessEnvelope<Post[]>;
       expect(body.data).toEqual(posts);
@@ -38,16 +36,14 @@ describe('Posts (e2e)', () => {
       const posts = [{ id: 1, userId: 7, title: 'first', body: 'body one' }];
       mockUpstream().get('/posts').query({ userId: '7' }).reply(200, posts);
 
-      const response = await request(app.getHttpServer())
-        .get('/posts?userId=7')
-        .expect(200);
+      const response = await api(app).get('/posts?userId=7').expect(200);
 
       const body = response.body as SuccessEnvelope<Post[]>;
       expect(body.data).toEqual(posts);
     });
 
     it('rejects a non-numeric userId with 400', async () => {
-      await request(app.getHttpServer()).get('/posts?userId=abc').expect(400);
+      await api(app).get('/posts?userId=abc').expect(400);
     });
   });
 
@@ -56,16 +52,14 @@ describe('Posts (e2e)', () => {
       const post = { id: 1, userId: 1, title: 'first', body: 'body one' };
       mockUpstream().get('/posts/1').reply(200, post);
 
-      const response = await request(app.getHttpServer())
-        .get('/posts/1')
-        .expect(200);
+      const response = await api(app).get('/posts/1').expect(200);
 
       const body = response.body as SuccessEnvelope<Post>;
       expect(body.data).toEqual(post);
     });
 
     it('rejects a non-positive-integer id with 400', async () => {
-      await request(app.getHttpServer()).get('/posts/abc').expect(400);
+      await api(app).get('/posts/abc').expect(400);
     });
   });
 
@@ -75,17 +69,14 @@ describe('Posts (e2e)', () => {
       const created = { id: 101, ...dto };
       mockUpstream().post('/posts', dto).reply(201, created);
 
-      const response = await request(app.getHttpServer())
-        .post('/posts')
-        .send(dto)
-        .expect(201);
+      const response = await api(app).post('/posts').send(dto).expect(201);
 
       const body = response.body as SuccessEnvelope<Post>;
       expect(body.data).toEqual(created);
     });
 
     it('rejects a payload missing required fields with 400', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await api(app)
         .post('/posts')
         .send({ title: 'only a title' })
         .expect(400);
@@ -96,7 +87,7 @@ describe('Posts (e2e)', () => {
     });
 
     it('rejects an unknown property with 400', async () => {
-      await request(app.getHttpServer())
+      await api(app)
         .post('/posts')
         .send({ title: 't', body: 'b', userId: 1, extra: 'nope' })
         .expect(400);
@@ -109,24 +100,21 @@ describe('Posts (e2e)', () => {
       const updated = { id: 1, ...dto };
       mockUpstream().put('/posts/1', dto).reply(200, updated);
 
-      const response = await request(app.getHttpServer())
-        .put('/posts/1')
-        .send(dto)
-        .expect(200);
+      const response = await api(app).put('/posts/1').send(dto).expect(200);
 
       const body = response.body as SuccessEnvelope<Post>;
       expect(body.data).toEqual(updated);
     });
 
     it('rejects a non-positive-integer id with 400', async () => {
-      await request(app.getHttpServer())
+      await api(app)
         .put('/posts/abc')
         .send({ title: 't', body: 'b', userId: 1 })
         .expect(400);
     });
 
     it('rejects an invalid field type with 400', async () => {
-      await request(app.getHttpServer())
+      await api(app)
         .put('/posts/1')
         .send({ title: 't', body: 'b', userId: 'not-a-number' })
         .expect(400);
@@ -139,20 +127,14 @@ describe('Posts (e2e)', () => {
       const patched = { id: 1, userId: 1, title: 'patched title', body: 'b' };
       mockUpstream().patch('/posts/1', dto).reply(200, patched);
 
-      const response = await request(app.getHttpServer())
-        .patch('/posts/1')
-        .send(dto)
-        .expect(200);
+      const response = await api(app).patch('/posts/1').send(dto).expect(200);
 
       const body = response.body as SuccessEnvelope<Post>;
       expect(body.data).toEqual(patched);
     });
 
     it('rejects a non-positive-integer id with 400', async () => {
-      await request(app.getHttpServer())
-        .patch('/posts/abc')
-        .send({ title: 't' })
-        .expect(400);
+      await api(app).patch('/posts/abc').send({ title: 't' }).expect(400);
     });
   });
 
@@ -160,16 +142,14 @@ describe('Posts (e2e)', () => {
     it('deletes a post and returns the upstream response', async () => {
       mockUpstream().delete('/posts/1').reply(200, {});
 
-      const response = await request(app.getHttpServer())
-        .delete('/posts/1')
-        .expect(200);
+      const response = await api(app).delete('/posts/1').expect(200);
 
       const body = response.body as SuccessEnvelope<object>;
       expect(body.data).toEqual({});
     });
 
     it('rejects a non-positive-integer id with 400', async () => {
-      await request(app.getHttpServer()).delete('/posts/abc').expect(400);
+      await api(app).delete('/posts/abc').expect(400);
     });
   });
 
@@ -183,16 +163,14 @@ describe('Posts (e2e)', () => {
         .query({ postId: '1' })
         .reply(200, comments);
 
-      const response = await request(app.getHttpServer())
-        .get('/posts/1/comments')
-        .expect(200);
+      const response = await api(app).get('/posts/1/comments').expect(200);
 
       const body = response.body as SuccessEnvelope<Comment[]>;
       expect(body.data).toEqual(comments);
     });
 
     it('rejects a non-positive-integer id with 400', async () => {
-      await request(app.getHttpServer()).get('/posts/abc/comments').expect(400);
+      await api(app).get('/posts/abc/comments').expect(400);
     });
   });
 });

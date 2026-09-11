@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach, expect } from 'vitest';
 import { INestApplication } from '@nestjs/common';
-import request from 'supertest';
 import { Photo } from '../../src/modules/photos/entities/photo.entity';
+import { api } from '../support/api';
 import { createTestApp } from '../support/create-test-app';
 import { ErrorEnvelope, SuccessEnvelope } from '../support/response-envelope';
 import { mockUpstream } from '../support/upstream-mock';
@@ -30,9 +30,7 @@ describe('Photos (e2e)', () => {
       ];
       mockUpstream().get('/photos').reply(200, photos);
 
-      const response = await request(app.getHttpServer())
-        .get('/photos')
-        .expect(200);
+      const response = await api(app).get('/photos').expect(200);
 
       const body = response.body as SuccessEnvelope<Photo[]>;
       expect(body.data).toEqual(photos);
@@ -50,9 +48,7 @@ describe('Photos (e2e)', () => {
       ];
       mockUpstream().get('/photos').query({ albumId: '7' }).reply(200, photos);
 
-      const response = await request(app.getHttpServer())
-        .get('/photos?albumId=7')
-        .expect(200);
+      const response = await api(app).get('/photos?albumId=7').expect(200);
 
       const body = response.body as SuccessEnvelope<Photo[]>;
       expect(body.data).toEqual(photos);
@@ -70,16 +66,14 @@ describe('Photos (e2e)', () => {
       };
       mockUpstream().get('/photos/1').reply(200, photo);
 
-      const response = await request(app.getHttpServer())
-        .get('/photos/1')
-        .expect(200);
+      const response = await api(app).get('/photos/1').expect(200);
 
       const body = response.body as SuccessEnvelope<Photo>;
       expect(body.data).toEqual(photo);
     });
 
     it('rejects a non-positive-integer id with 400', async () => {
-      await request(app.getHttpServer()).get('/photos/abc').expect(400);
+      await api(app).get('/photos/abc').expect(400);
     });
   });
 
@@ -94,17 +88,14 @@ describe('Photos (e2e)', () => {
       const created = { id: 5001, ...dto };
       mockUpstream().post('/photos', dto).reply(201, created);
 
-      const response = await request(app.getHttpServer())
-        .post('/photos')
-        .send(dto)
-        .expect(201);
+      const response = await api(app).post('/photos').send(dto).expect(201);
 
       const body = response.body as SuccessEnvelope<Photo>;
       expect(body.data).toEqual(created);
     });
 
     it('rejects a non-url value with 400', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await api(app)
         .post('/photos')
         .send({
           albumId: 1,
@@ -130,10 +121,7 @@ describe('Photos (e2e)', () => {
       const updated = { id: 1, ...dto };
       mockUpstream().put('/photos/1', dto).reply(200, updated);
 
-      const response = await request(app.getHttpServer())
-        .put('/photos/1')
-        .send(dto)
-        .expect(200);
+      const response = await api(app).put('/photos/1').send(dto).expect(200);
 
       const body = response.body as SuccessEnvelope<Photo>;
       expect(body.data).toEqual(updated);
@@ -152,10 +140,7 @@ describe('Photos (e2e)', () => {
       };
       mockUpstream().patch('/photos/1', dto).reply(200, patched);
 
-      const response = await request(app.getHttpServer())
-        .patch('/photos/1')
-        .send(dto)
-        .expect(200);
+      const response = await api(app).patch('/photos/1').send(dto).expect(200);
 
       const body = response.body as SuccessEnvelope<Photo>;
       expect(body.data).toEqual(patched);
@@ -166,9 +151,7 @@ describe('Photos (e2e)', () => {
     it('deletes a photo and returns the upstream response', async () => {
       mockUpstream().delete('/photos/1').reply(200, {});
 
-      const response = await request(app.getHttpServer())
-        .delete('/photos/1')
-        .expect(200);
+      const response = await api(app).delete('/photos/1').expect(200);
 
       const body = response.body as SuccessEnvelope<object>;
       expect(body.data).toEqual({});

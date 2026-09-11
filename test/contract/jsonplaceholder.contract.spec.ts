@@ -1,9 +1,9 @@
 import { describe, it, beforeAll, afterAll, expect } from 'vitest';
 import { INestApplication } from '@nestjs/common';
-import request from 'supertest';
 import { Comment } from '../../src/modules/comments/entities/comment.entity';
 import { Post } from '../../src/modules/posts/entities/post.entity';
 import { User } from '../../src/modules/users/entities/user.entity';
+import { api } from '../support/api';
 import { createTestApp } from '../support/create-test-app';
 
 // Opt-in: hits the real jsonplaceholder.typicode.com through our own app
@@ -29,9 +29,7 @@ describeIfEnabled('JSONPlaceholder contract', () => {
   });
 
   it('GET /posts returns objects shaped like Post', async () => {
-    const response = await request(app.getHttpServer())
-      .get('/posts')
-      .expect(200);
+    const response = await api(app).get('/posts').expect(200);
 
     const posts = (response.body as { data: Post[] }).data;
     expect(Array.isArray(posts)).toBe(true);
@@ -52,9 +50,7 @@ describeIfEnabled('JSONPlaceholder contract', () => {
   });
 
   it('GET /posts/:id/comments returns Comment[] scoped to the post', async () => {
-    const response = await request(app.getHttpServer())
-      .get('/posts/1/comments')
-      .expect(200);
+    const response = await api(app).get('/posts/1/comments').expect(200);
 
     const comments = (response.body as { data: Comment[] }).data;
     expect(comments.length).toBeGreaterThan(0);
@@ -69,9 +65,7 @@ describeIfEnabled('JSONPlaceholder contract', () => {
   });
 
   it('GET /users/:id returns a User with nested address/company/geo', async () => {
-    const response = await request(app.getHttpServer())
-      .get('/users/1')
-      .expect(200);
+    const response = await api(app).get('/users/1').expect(200);
 
     const user = (response.body as { data: User }).data;
     expect(user.id).toEqual(expect.any(Number));

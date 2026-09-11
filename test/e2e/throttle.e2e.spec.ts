@@ -1,6 +1,6 @@
 import { describe, it, afterEach } from 'vitest';
 import { INestApplication } from '@nestjs/common';
-import request from 'supertest';
+import { api } from '../support/api';
 import { createTestApp } from '../support/create-test-app';
 import { mockUpstream } from '../support/upstream-mock';
 import { withEnvOverrides } from '../support/with-env-overrides';
@@ -19,9 +19,9 @@ describe('Rate limiting (e2e)', () => {
         app = await createTestApp();
         mockUpstream().get('/posts').times(2).reply(200, []);
 
-        await request(app.getHttpServer()).get('/posts').expect(200);
-        await request(app.getHttpServer()).get('/posts').expect(200);
-        await request(app.getHttpServer()).get('/posts').expect(429);
+        await api(app).get('/posts').expect(200);
+        await api(app).get('/posts').expect(200);
+        await api(app).get('/posts').expect(429);
       },
     );
   });
@@ -33,9 +33,9 @@ describe('Rate limiting (e2e)', () => {
         app = await createTestApp();
         mockUpstream().get('/posts/1').times(3).reply(200, { id: 1 });
 
-        await request(app.getHttpServer()).get('/health/ready').expect(200);
-        await request(app.getHttpServer()).get('/health/ready').expect(200);
-        await request(app.getHttpServer()).get('/health/ready').expect(200);
+        await api(app).get('/health/ready').expect(200);
+        await api(app).get('/health/ready').expect(200);
+        await api(app).get('/health/ready').expect(200);
       },
     );
   });

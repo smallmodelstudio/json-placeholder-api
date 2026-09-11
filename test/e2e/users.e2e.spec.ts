@@ -1,10 +1,10 @@
 import { describe, it, beforeEach, afterEach, expect } from 'vitest';
 import { INestApplication } from '@nestjs/common';
-import request from 'supertest';
 import { Album } from '../../src/modules/albums/entities/album.entity';
 import { Post } from '../../src/modules/posts/entities/post.entity';
 import { Todo } from '../../src/modules/todos/entities/todo.entity';
 import { User } from '../../src/modules/users/entities/user.entity';
+import { api } from '../support/api';
 import { createTestApp } from '../support/create-test-app';
 import { ErrorEnvelope, SuccessEnvelope } from '../support/response-envelope';
 import { mockUpstream } from '../support/upstream-mock';
@@ -45,9 +45,7 @@ describe('Users (e2e)', () => {
       const users = [{ id: 1, ...validUserPayload }];
       mockUpstream().get('/users').reply(200, users);
 
-      const response = await request(app.getHttpServer())
-        .get('/users')
-        .expect(200);
+      const response = await api(app).get('/users').expect(200);
 
       const body = response.body as SuccessEnvelope<User[]>;
       expect(body.data).toEqual(users);
@@ -59,16 +57,14 @@ describe('Users (e2e)', () => {
       const user = { id: 1, ...validUserPayload };
       mockUpstream().get('/users/1').reply(200, user);
 
-      const response = await request(app.getHttpServer())
-        .get('/users/1')
-        .expect(200);
+      const response = await api(app).get('/users/1').expect(200);
 
       const body = response.body as SuccessEnvelope<User>;
       expect(body.data).toEqual(user);
     });
 
     it('rejects a non-positive-integer id with 400', async () => {
-      await request(app.getHttpServer()).get('/users/abc').expect(400);
+      await api(app).get('/users/abc').expect(400);
     });
   });
 
@@ -77,7 +73,7 @@ describe('Users (e2e)', () => {
       const created = { id: 11, ...validUserPayload };
       mockUpstream().post('/users', validUserPayload).reply(201, created);
 
-      const response = await request(app.getHttpServer())
+      const response = await api(app)
         .post('/users')
         .send(validUserPayload)
         .expect(201);
@@ -90,7 +86,7 @@ describe('Users (e2e)', () => {
       const { address, ...withoutAddress } = validUserPayload;
       void address;
 
-      const response = await request(app.getHttpServer())
+      const response = await api(app)
         .post('/users')
         .send(withoutAddress)
         .expect(400);
@@ -108,10 +104,7 @@ describe('Users (e2e)', () => {
         },
       };
 
-      await request(app.getHttpServer())
-        .post('/users')
-        .send(invalidPayload)
-        .expect(400);
+      await api(app).post('/users').send(invalidPayload).expect(400);
     });
   });
 
@@ -120,7 +113,7 @@ describe('Users (e2e)', () => {
       const updated = { id: 1, ...validUserPayload };
       mockUpstream().put('/users/1', validUserPayload).reply(200, updated);
 
-      const response = await request(app.getHttpServer())
+      const response = await api(app)
         .put('/users/1')
         .send(validUserPayload)
         .expect(200);
@@ -136,10 +129,7 @@ describe('Users (e2e)', () => {
       const patched = { id: 1, ...validUserPayload, name: 'patched name' };
       mockUpstream().patch('/users/1', dto).reply(200, patched);
 
-      const response = await request(app.getHttpServer())
-        .patch('/users/1')
-        .send(dto)
-        .expect(200);
+      const response = await api(app).patch('/users/1').send(dto).expect(200);
 
       const body = response.body as SuccessEnvelope<User>;
       expect(body.data).toEqual(patched);
@@ -150,9 +140,7 @@ describe('Users (e2e)', () => {
     it('deletes a user and returns the upstream response', async () => {
       mockUpstream().delete('/users/1').reply(200, {});
 
-      const response = await request(app.getHttpServer())
-        .delete('/users/1')
-        .expect(200);
+      const response = await api(app).delete('/users/1').expect(200);
 
       const body = response.body as SuccessEnvelope<object>;
       expect(body.data).toEqual({});
@@ -164,9 +152,7 @@ describe('Users (e2e)', () => {
       const posts = [{ id: 1, userId: 1, title: 't', body: 'b' }];
       mockUpstream().get('/posts').query({ userId: '1' }).reply(200, posts);
 
-      const response = await request(app.getHttpServer())
-        .get('/users/1/posts')
-        .expect(200);
+      const response = await api(app).get('/users/1/posts').expect(200);
 
       const body = response.body as SuccessEnvelope<Post[]>;
       expect(body.data).toEqual(posts);
@@ -178,9 +164,7 @@ describe('Users (e2e)', () => {
       const todos = [{ id: 1, userId: 1, title: 't', completed: false }];
       mockUpstream().get('/todos').query({ userId: '1' }).reply(200, todos);
 
-      const response = await request(app.getHttpServer())
-        .get('/users/1/todos')
-        .expect(200);
+      const response = await api(app).get('/users/1/todos').expect(200);
 
       const body = response.body as SuccessEnvelope<Todo[]>;
       expect(body.data).toEqual(todos);
@@ -192,16 +176,14 @@ describe('Users (e2e)', () => {
       const albums = [{ id: 1, userId: 1, title: 't' }];
       mockUpstream().get('/albums').query({ userId: '1' }).reply(200, albums);
 
-      const response = await request(app.getHttpServer())
-        .get('/users/1/albums')
-        .expect(200);
+      const response = await api(app).get('/users/1/albums').expect(200);
 
       const body = response.body as SuccessEnvelope<Album[]>;
       expect(body.data).toEqual(albums);
     });
 
     it('rejects a non-positive-integer id with 400', async () => {
-      await request(app.getHttpServer()).get('/users/abc/albums').expect(400);
+      await api(app).get('/users/abc/albums').expect(400);
     });
   });
 });

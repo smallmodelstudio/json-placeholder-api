@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach, expect } from 'vitest';
 import { INestApplication } from '@nestjs/common';
-import request from 'supertest';
 import { Post } from '../../src/modules/posts/entities/post.entity';
+import { api } from '../support/api';
 import { createTestApp } from '../support/create-test-app';
 import { ErrorEnvelope, SuccessEnvelope } from '../support/response-envelope';
 import { mockUpstream } from '../support/upstream-mock';
@@ -23,9 +23,7 @@ describe('Cross-cutting error handling (e2e)', () => {
       const post = { id: 1, userId: 1, title: 'first', body: 'body one' };
       mockUpstream().get('/posts/1').reply(200, post);
 
-      const response = await request(app.getHttpServer())
-        .get('/posts/1')
-        .expect(200);
+      const response = await api(app).get('/posts/1').expect(200);
 
       const body = response.body as SuccessEnvelope<Post>;
       expect(body.data).toEqual(post);
@@ -40,7 +38,7 @@ describe('Cross-cutting error handling (e2e)', () => {
         .get('/posts/1')
         .reply(200, { id: 1, userId: 1, title: 't', body: 'b' });
 
-      const response = await request(app.getHttpServer())
+      const response = await api(app)
         .get('/posts/1')
         .set('x-correlation-id', 'test-correlation-123')
         .expect(200);
@@ -55,9 +53,7 @@ describe('Cross-cutting error handling (e2e)', () => {
         .get('/posts/1')
         .reply(200, { id: 1, userId: 1, title: 't', body: 'b' });
 
-      const response = await request(app.getHttpServer())
-        .get('/posts/1')
-        .expect(200);
+      const response = await api(app).get('/posts/1').expect(200);
 
       const body = response.body as SuccessEnvelope<Post>;
       const correlationHeader = response.headers['x-correlation-id'];
@@ -68,9 +64,7 @@ describe('Cross-cutting error handling (e2e)', () => {
 
   describe('validation rejection', () => {
     it('returns a 400 envelope with field-level messages', async () => {
-      const response = await request(app.getHttpServer())
-        .get('/posts?userId=abc')
-        .expect(400);
+      const response = await api(app).get('/posts?userId=abc').expect(400);
 
       const body = response.body as ErrorEnvelope;
       expect(body).toMatchObject({
@@ -88,9 +82,7 @@ describe('Cross-cutting error handling (e2e)', () => {
     it('maps an upstream 500 (after retries exhaust) to a 502 envelope', async () => {
       mockUpstream().persist().get('/posts/1').reply(500);
 
-      const response = await request(app.getHttpServer())
-        .get('/posts/1')
-        .expect(502);
+      const response = await api(app).get('/posts/1').expect(502);
 
       const body = response.body as ErrorEnvelope;
       expect(body).toMatchObject({
@@ -116,9 +108,7 @@ describe('Cross-cutting error handling (e2e)', () => {
               .delayConnection(200)
               .reply(200, {});
 
-            const response = await request(timeoutApp.getHttpServer())
-              .get('/posts/1')
-              .expect(504);
+            const response = await api(timeoutApp).get('/posts/1').expect(504);
 
             const body = response.body as ErrorEnvelope;
             expect(body).toMatchObject({
@@ -136,9 +126,7 @@ describe('Cross-cutting error handling (e2e)', () => {
     it('passes through an upstream 404 unchanged', async () => {
       mockUpstream().get('/posts/999').reply(404);
 
-      const response = await request(app.getHttpServer())
-        .get('/posts/999')
-        .expect(404);
+      const response = await api(app).get('/posts/999').expect(404);
 
       const body = response.body as ErrorEnvelope;
       expect(body).toMatchObject({
@@ -150,9 +138,7 @@ describe('Cross-cutting error handling (e2e)', () => {
 
   describe('unknown routes', () => {
     it('returns a 404 envelope for a route with no matching handler', async () => {
-      const response = await request(app.getHttpServer())
-        .get('/nonexistent-route')
-        .expect(404);
+      const response = await api(app).get('/nonexistent-route').expect(404);
 
       const body = response.body as ErrorEnvelope;
       expect(body).toMatchObject({

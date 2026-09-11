@@ -439,6 +439,10 @@ this environment.
 
 - Vitest globals are deliberately **off** — every spec imports its own
   `describe`/`it`/`vi`/etc.; see `test/README.md` for the pattern per kind.
+- e2e/contract specs call `api(app)` (`test/support/api.ts`) instead of
+  `request(app.getHttpServer())`. Nest types `getHttpServer()` as `any`, so
+  the raw form raised a `no-unsafe-argument` warning at all 96 call sites;
+  the helper holds one `as Server` assertion instead.
 - `unplugin-swc` reads decorator settings from `tsconfig.json` automatically
   — don't duplicate that config in `vitest.config.mts`.
 - `tsconfig.json` has no `baseUrl` and no path aliases — all internal

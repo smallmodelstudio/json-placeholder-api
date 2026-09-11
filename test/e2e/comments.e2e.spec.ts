@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach, expect } from 'vitest';
 import { INestApplication } from '@nestjs/common';
-import request from 'supertest';
 import { Comment } from '../../src/modules/comments/entities/comment.entity';
+import { api } from '../support/api';
 import { createTestApp } from '../support/create-test-app';
 import { ErrorEnvelope, SuccessEnvelope } from '../support/response-envelope';
 import { mockUpstream } from '../support/upstream-mock';
@@ -24,9 +24,7 @@ describe('Comments (e2e)', () => {
       ];
       mockUpstream().get('/comments').reply(200, comments);
 
-      const response = await request(app.getHttpServer())
-        .get('/comments')
-        .expect(200);
+      const response = await api(app).get('/comments').expect(200);
 
       const body = response.body as SuccessEnvelope<Comment[]>;
       expect(body.data).toEqual(comments);
@@ -41,9 +39,7 @@ describe('Comments (e2e)', () => {
         .query({ postId: '7' })
         .reply(200, comments);
 
-      const response = await request(app.getHttpServer())
-        .get('/comments?postId=7')
-        .expect(200);
+      const response = await api(app).get('/comments?postId=7').expect(200);
 
       const body = response.body as SuccessEnvelope<Comment[]>;
       expect(body.data).toEqual(comments);
@@ -61,16 +57,14 @@ describe('Comments (e2e)', () => {
       };
       mockUpstream().get('/comments/1').reply(200, comment);
 
-      const response = await request(app.getHttpServer())
-        .get('/comments/1')
-        .expect(200);
+      const response = await api(app).get('/comments/1').expect(200);
 
       const body = response.body as SuccessEnvelope<Comment>;
       expect(body.data).toEqual(comment);
     });
 
     it('rejects a non-positive-integer id with 400', async () => {
-      await request(app.getHttpServer()).get('/comments/abc').expect(400);
+      await api(app).get('/comments/abc').expect(400);
     });
   });
 
@@ -85,17 +79,14 @@ describe('Comments (e2e)', () => {
       const created = { id: 501, ...dto };
       mockUpstream().post('/comments', dto).reply(201, created);
 
-      const response = await request(app.getHttpServer())
-        .post('/comments')
-        .send(dto)
-        .expect(201);
+      const response = await api(app).post('/comments').send(dto).expect(201);
 
       const body = response.body as SuccessEnvelope<Comment>;
       expect(body.data).toEqual(created);
     });
 
     it('rejects an invalid email with 400', async () => {
-      const response = await request(app.getHttpServer())
+      const response = await api(app)
         .post('/comments')
         .send({ postId: 1, name: 'n', email: 'not-an-email', body: 'b' })
         .expect(400);
@@ -116,10 +107,7 @@ describe('Comments (e2e)', () => {
       const updated = { id: 1, ...dto };
       mockUpstream().put('/comments/1', dto).reply(200, updated);
 
-      const response = await request(app.getHttpServer())
-        .put('/comments/1')
-        .send(dto)
-        .expect(200);
+      const response = await api(app).put('/comments/1').send(dto).expect(200);
 
       const body = response.body as SuccessEnvelope<Comment>;
       expect(body.data).toEqual(updated);
@@ -138,7 +126,7 @@ describe('Comments (e2e)', () => {
       };
       mockUpstream().patch('/comments/1', dto).reply(200, patched);
 
-      const response = await request(app.getHttpServer())
+      const response = await api(app)
         .patch('/comments/1')
         .send(dto)
         .expect(200);
@@ -152,9 +140,7 @@ describe('Comments (e2e)', () => {
     it('deletes a comment and returns the upstream response', async () => {
       mockUpstream().delete('/comments/1').reply(200, {});
 
-      const response = await request(app.getHttpServer())
-        .delete('/comments/1')
-        .expect(200);
+      const response = await api(app).delete('/comments/1').expect(200);
 
       const body = response.body as SuccessEnvelope<object>;
       expect(body.data).toEqual({});
