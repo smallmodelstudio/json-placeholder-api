@@ -44,7 +44,16 @@ On top of `strict`, `tsconfig.json` turns on:
 `skipLibCheck` stays `true`. With it off, several dependencies'
 `.d.ts` files fail these flags, and those errors can't be fixed from this repo.
 
-There are no path aliases or `baseUrl`, so every internal import is relative.
+There are no `baseUrl` or internal path aliases — every internal import stays
+relative. `tsconfig.json` does carry one `paths` entry, but it's not an
+alias: `@nestjs/common@12`'s `exports` map only resolves `./*` subpaths to a
+literal `*.js` file, not a directory's `index.js`, so `@nestjs/common/interfaces`
+(imported by `@nestjs/throttler@6`'s `.d.ts`, which hasn't been updated for
+Nest 12 yet) fails to resolve under `moduleResolution: nodenext` — silently
+turning `ModuleMetadata` into `any` and making `ThrottlerAsyncOptions.imports`
+required instead of optional. The `paths` entry remaps that one subpath
+straight to the file that's actually on disk. Drop it once `@nestjs/throttler`
+ships a release that imports from the package root instead.
 
 ## Lint rules
 

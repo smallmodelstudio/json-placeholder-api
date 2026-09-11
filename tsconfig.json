@@ -3,6 +3,16 @@
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "resolvePackageJsonExports": true,
+    // @nestjs/common@12's exports map has "./*": "./*.js", which only
+    // matches a literal interfaces.js file, not the interfaces/index.js
+    // directory @nestjs/throttler@6's .d.ts imports from — so nodenext
+    // resolution fails and ModuleMetadata falls back to `any`, silently
+    // making ThrottlerAsyncOptions.imports required instead of optional.
+    // Remap the subpath directly until throttler ships a v12-compatible
+    // release that imports from the package root instead.
+    "paths": {
+      "@nestjs/common/interfaces": ["./node_modules/@nestjs/common/interfaces/index.d.ts"]
+    },
     "esModuleInterop": true,
     "isolatedModules": true,
     "declaration": true,
