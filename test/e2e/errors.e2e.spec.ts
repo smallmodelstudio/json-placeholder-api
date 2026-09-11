@@ -60,6 +60,23 @@ describe('Cross-cutting error handling (e2e)', () => {
       expect(correlationHeader).toEqual(expect.any(String));
       expect(body.meta.correlationId).toBe(correlationHeader);
     });
+
+    it('generates a correlation id instead of echoing one outside the allowed charset', async () => {
+      mockUpstream()
+        .get('/posts/1')
+        .reply(200, { id: 1, userId: 1, title: 't', body: 'b' });
+
+      const response = await api(app)
+        .get('/posts/1')
+        .set('x-correlation-id', 'not a valid id!')
+        .expect(200);
+
+      const body = response.body as SuccessEnvelope<Post>;
+      expect(response.headers['x-correlation-id']).not.toBe('not a valid id!');
+      expect(body.meta.correlationId).toBe(
+        response.headers['x-correlation-id'],
+      );
+    });
   });
 
   describe('validation rejection', () => {
@@ -133,6 +150,21 @@ describe('Cross-cutting error handling (e2e)', () => {
         statusCode: 404,
         path: '/posts/999',
       });
+    });
+
+    it("doesn't leak the upstream method/path into the client-facing message", async () => {
+      mockUpstream().get('/posts/999').reply(404);
+
+      const response = await api(app).get('/posts/999').expect(404);
+
+      const body = response.body as ErrorEnvelope;
+      // Real bug this guards against: the message used to be built from
+      // UpstreamService's internal `describe(config)` ("Upstream responded
+      // with 404: GET /posts/999"), leaking upstream request detail to the
+      // client instead of a generic, status-derived message.
+      expect(body.message).toBe('Not Found');
+      expect(body.message).not.toContain('GET');
+      expect(body.message).not.toContain('Upstream');
     });
   });
 

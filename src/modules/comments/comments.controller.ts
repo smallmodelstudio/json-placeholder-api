@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import {
+  ApiCommonErrorResponses,
   ApiEnvelopedEmptyResponse,
   ApiEnvelopedResponse,
 } from '../../common/decorators/api-envelope-response.decorator';
@@ -22,6 +23,7 @@ import { UpdateCommentDto } from './dto/update-comment.dto';
 import { Comment } from './entities/comment.entity';
 
 @ApiTags('comments')
+@ApiCommonErrorResponses()
 @Controller('comments')
 export class CommentsController {
   constructor(private readonly commentsService: CommentsService) {}

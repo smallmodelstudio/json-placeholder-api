@@ -71,21 +71,53 @@ describe('UsersService', () => {
   });
 
   describe('findAll', () => {
-    it('calls the upstream users endpoint', async () => {
+    it('calls the upstream users endpoint with no params when the query is empty', async () => {
       const users: User[] = [sampleUser];
       upstream.get.mockResolvedValueOnce(users);
 
-      const result = await service.findAll();
+      const result = await service.findAll({});
 
       expect(result).toBe(users);
-      expect(upstream.get).toHaveBeenCalledWith('/users');
+      expect(upstream.get).toHaveBeenCalledWith('/users', {
+        params: undefined,
+      });
+    });
+
+    it('forwards username as a query param when provided', async () => {
+      upstream.get.mockResolvedValueOnce([]);
+
+      await service.findAll({ username: 'Bret' });
+
+      expect(upstream.get).toHaveBeenCalledWith('/users', {
+        params: { username: 'Bret' },
+      });
+    });
+
+    it('forwards email as a query param when provided', async () => {
+      upstream.get.mockResolvedValueOnce([]);
+
+      await service.findAll({ email: 'sincere@april.biz' });
+
+      expect(upstream.get).toHaveBeenCalledWith('/users', {
+        params: { email: 'sincere@april.biz' },
+      });
+    });
+
+    it('forwards both filters when both are provided', async () => {
+      upstream.get.mockResolvedValueOnce([]);
+
+      await service.findAll({ username: 'Bret', email: 'sincere@april.biz' });
+
+      expect(upstream.get).toHaveBeenCalledWith('/users', {
+        params: { username: 'Bret', email: 'sincere@april.biz' },
+      });
     });
 
     it('propagates upstream errors', async () => {
       const error = new Error('upstream failure');
       upstream.get.mockRejectedValueOnce(error);
 
-      await expect(service.findAll()).rejects.toThrow(error);
+      await expect(service.findAll({})).rejects.toThrow(error);
     });
   });
 

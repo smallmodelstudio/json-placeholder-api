@@ -57,7 +57,7 @@ describe('AllExceptionsFilter', () => {
   it('passes through a 4xx UpstreamException status unchanged', () => {
     const exception = new UpstreamException(
       UpstreamErrorType.BAD_RESPONSE,
-      'not found',
+      'Upstream responded with 404: GET /posts/999',
       404,
     );
 
@@ -67,11 +67,29 @@ describe('AllExceptionsFilter', () => {
     expect(sendMock).toHaveBeenCalledWith(
       expect.objectContaining({
         statusCode: 404,
+        message: 'Not Found',
         error: 'Not Found',
         correlationId: 'corr-1',
         path: '/posts/1',
       }),
     );
+  });
+
+  it("doesn't leak the internal exception message (method/path) into a 4xx UpstreamException's client-facing message", () => {
+    const exception = new UpstreamException(
+      UpstreamErrorType.BAD_RESPONSE,
+      'Upstream responded with 404: GET /posts/999',
+      404,
+    );
+
+    filter.catch(exception, host);
+
+    const call = sendMock.mock.calls[0];
+    if (!call) {
+      throw new Error('expected sendMock to have been called');
+    }
+    expect(call[0]['message']).not.toContain('GET');
+    expect(call[0]['message']).not.toContain('/posts/999');
   });
 
   it('maps a 5xx UpstreamException to 502 Bad Gateway', () => {

@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import {
+  ApiCommonErrorResponses,
   ApiEnvelopedEmptyResponse,
   ApiEnvelopedResponse,
 } from '../../common/decorators/api-envelope-response.decorator';
@@ -23,6 +24,7 @@ import { UpdateAlbumDto } from './dto/update-album.dto';
 import { Album } from './entities/album.entity';
 
 @ApiTags('albums')
+@ApiCommonErrorResponses()
 @Controller('albums')
 export class AlbumsController {
   constructor(private readonly albumsService: AlbumsService) {}

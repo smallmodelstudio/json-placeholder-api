@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import {
+  ApiCommonErrorResponses,
   ApiEnvelopedEmptyResponse,
   ApiEnvelopedResponse,
 } from '../../common/decorators/api-envelope-response.decorator';
@@ -22,6 +23,7 @@ import { Todo } from './entities/todo.entity';
 import { TodosService } from './todos.service';
 
 @ApiTags('todos')
+@ApiCommonErrorResponses()
 @Controller('todos')
 export class TodosController {
   constructor(private readonly todosService: TodosService) {}

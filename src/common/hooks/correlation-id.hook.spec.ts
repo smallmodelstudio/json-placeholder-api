@@ -86,6 +86,45 @@ describe('registerCorrelationIdHook', () => {
     expect(request.correlationId.trim().length).toBeGreaterThan(0);
   });
 
+  it('rejects an incoming header containing characters outside the allowed set and generates a new id', () => {
+    const request = {
+      headers: { [CORRELATION_ID_HEADER]: 'not a valid id! \r\n' },
+      raw: {},
+    } as unknown as FastifyRequest;
+    const { reply } = makeReply();
+
+    onRequest(request, reply, vi.fn());
+
+    expect(request.correlationId).not.toBe('not a valid id! \r\n');
+    expect(request.correlationId).toMatch(/^[A-Za-z0-9_-]+$/);
+  });
+
+  it('rejects an incoming header longer than 128 characters and generates a new id', () => {
+    const tooLong = 'a'.repeat(129);
+    const request = {
+      headers: { [CORRELATION_ID_HEADER]: tooLong },
+      raw: {},
+    } as unknown as FastifyRequest;
+    const { reply } = makeReply();
+
+    onRequest(request, reply, vi.fn());
+
+    expect(request.correlationId).not.toBe(tooLong);
+  });
+
+  it('accepts an incoming header at exactly the 128 character limit', () => {
+    const atLimit = 'a'.repeat(128);
+    const request = {
+      headers: { [CORRELATION_ID_HEADER]: atLimit },
+      raw: {},
+    } as unknown as FastifyRequest;
+    const { reply } = makeReply();
+
+    onRequest(request, reply, vi.fn());
+
+    expect(request.correlationId).toBe(atLimit);
+  });
+
   describe('with an active OTel span', () => {
     // The API package's default ContextManager is a no-op, so
     // context.with() below wouldn't actually make the span "active" — it'd

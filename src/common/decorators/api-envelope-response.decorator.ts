@@ -17,7 +17,11 @@ const metaSchema: SchemaObject = {
   type: 'object',
   properties: {
     timestamp: { type: 'string', format: 'date-time' },
-    correlationId: { type: 'string', format: 'uuid' },
+    // Not always a UUID: it's either an OTel trace id (32 lowercase hex
+    // characters) or whatever a client's own x-correlation-id header
+    // supplied, within isValidCorrelationId()'s bounds — see
+    // correlation-id.hook.ts.
+    correlationId: { type: 'string' },
   },
   required: ['timestamp', 'correlationId'],
 };
@@ -69,11 +73,7 @@ export const ApiEnvelopedEmptyResponse = (description?: string) =>
   });
 
 // The shape AllExceptionsFilter sends for every error response, success
-// envelope's opposite number. Not used on every route's Swagger docs today
-// (see docs/README-architecture.md's note on undocumented error responses)
-// — currently only HealthController's 503, whose body would otherwise be
-// undocumented since it doesn't come from throwing one of this app's own,
-// already-`{message,error}`-shaped exceptions.
+// envelope's opposite number.
 export const errorEnvelopeSchema: SchemaObject = {
   type: 'object',
   properties: {
@@ -95,3 +95,39 @@ export const errorEnvelopeSchema: SchemaObject = {
     'correlationId',
   ],
 };
+
+// The error responses every resource controller's routes can produce, given
+// AllExceptionsFilter's mapping (see docs/README-architecture.md) — a class
+// decorator on each so every method inherits them without repeating the
+// same five ApiResponse calls per route. Health and its own 503 are
+// documented separately (health.controller.ts): its failure path doesn't go
+// through UpstreamService, so this set doesn't apply there.
+export const ApiCommonErrorResponses = () =>
+  applyDecorators(
+    ApiResponse({
+      status: 400,
+      description: 'A path/query param or request body failed validation.',
+      schema: errorEnvelopeSchema,
+    }),
+    ApiResponse({
+      status: 404,
+      description: 'The requested resource does not exist upstream.',
+      schema: errorEnvelopeSchema,
+    }),
+    ApiResponse({
+      status: 429,
+      description: 'Too many requests from this client.',
+      schema: errorEnvelopeSchema,
+    }),
+    ApiResponse({
+      status: 502,
+      description:
+        'The upstream service returned an error, or an invalid response.',
+      schema: errorEnvelopeSchema,
+    }),
+    ApiResponse({
+      status: 504,
+      description: 'The upstream service did not respond in time.',
+      schema: errorEnvelopeSchema,
+    }),
+  );

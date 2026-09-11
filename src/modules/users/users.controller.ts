@@ -7,9 +7,11 @@ import {
   Patch,
   Post as HttpPost,
   Put,
+  Query,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import {
+  ApiCommonErrorResponses,
   ApiEnvelopedEmptyResponse,
   ApiEnvelopedResponse,
 } from '../../common/decorators/api-envelope-response.decorator';
@@ -18,19 +20,21 @@ import { Album } from '../albums/entities/album.entity';
 import { Post } from '../posts/entities/post.entity';
 import { Todo } from '../todos/entities/todo.entity';
 import { CreateUserDto } from './dto/create-user.dto';
+import { QueryUsersDto } from './dto/query-users.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './entities/user.entity';
 import { UsersService } from './users.service';
 
 @ApiTags('users')
+@ApiCommonErrorResponses()
 @Controller('users')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Get()
   @ApiEnvelopedResponse(User, { isArray: true })
-  findAll(): Promise<User[]> {
-    return this.usersService.findAll();
+  findAll(@Query() query: QueryUsersDto): Promise<User[]> {
+    return this.usersService.findAll(query);
   }
 
   @Get(':id')

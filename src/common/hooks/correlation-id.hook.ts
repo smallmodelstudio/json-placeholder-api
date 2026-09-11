@@ -4,6 +4,25 @@ import { trace } from '@opentelemetry/api';
 
 export const CORRELATION_ID_HEADER = 'x-correlation-id';
 
+// Bounds what a client-supplied header can do once it's echoed back in the
+// response header, logged on every line for the request (pino-http's access
+// log, AllExceptionsFilter's error log), and rendered in Swagger/clients as
+// a plain string: no control characters (log-line injection), no unbounded
+// length, and nothing that isn't safe to drop straight into a header value.
+// A trace id (32 lowercase hex) and a typical UUID both satisfy this; it's
+// deliberately wider than either so a caller's own request-id scheme keeps
+// working.
+const MAX_CORRELATION_ID_LENGTH = 128;
+const VALID_CORRELATION_ID_PATTERN = /^[A-Za-z0-9_-]+$/;
+
+function isValidCorrelationId(value: string): boolean {
+  return (
+    value.length > 0 &&
+    value.length <= MAX_CORRELATION_ID_LENGTH &&
+    VALID_CORRELATION_ID_PATTERN.test(value)
+  );
+}
+
 // Deliberately a raw Fastify `onRequest` hook rather than a Nest
 // interceptor or guard: both of those only run once a route has matched,
 // so a request to an unknown path (404, no controller at all) would reach
@@ -20,9 +39,10 @@ export function registerCorrelationIdHook(instance: FastifyInstance): void {
   instance.addHook('onRequest', (request, reply, done) => {
     const incoming = request.headers[CORRELATION_ID_HEADER];
     const incomingValue = Array.isArray(incoming) ? incoming[0] : incoming;
+    const trimmedIncomingValue = incomingValue?.trim();
     const correlationId =
-      incomingValue && incomingValue.trim().length > 0
-        ? incomingValue
+      trimmedIncomingValue && isValidCorrelationId(trimmedIncomingValue)
+        ? trimmedIncomingValue
         : generateCorrelationId();
 
     request.correlationId = correlationId;
@@ -45,10 +65,11 @@ export function registerCorrelationIdHook(instance: FastifyInstance): void {
 // running (unit/e2e tests, `nest start` without `--import`) there's no
 // active span, so this falls back to randomUUID().
 //
-// A client-supplied x-correlation-id is still honoured as-is above — the
-// API's existing contract of echoing back whatever the caller sent takes
-// priority over the trace id in that case, so the two can legitimately
-// diverge for a client-driven correlation id.
+// A client-supplied x-correlation-id that passes isValidCorrelationId()
+// above is still honoured as given, taking priority over the trace id — so
+// the two can legitimately diverge for a client-driven correlation id. A
+// header that fails validation (too long, or outside the allowed charset)
+// falls back to this instead, the same as no header at all.
 function generateCorrelationId(): string {
   return trace.getActiveSpan()?.spanContext().traceId ?? randomUUID();
 }
