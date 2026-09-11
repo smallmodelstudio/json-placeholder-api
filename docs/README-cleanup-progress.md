@@ -32,13 +32,13 @@ CLAUDE.md's docs-describe-current-state norm applies again.
 6. **`ParsePositiveIntPipe` accepts `0x1`/`1e3`.** Turned out to be a
    two-part bug: Nest's global `ValidationPipe` (`transform: true`) already
    coerces any Number-typed `@Param()`/`@Query()` via a lossy `+value`
-   *before* a route's own pipe runs — confirmed by instrumenting the pipe
+   _before_ a route's own pipe runs — confirmed by instrumenting the pipe
    directly, which showed it receiving the already-coerced JS number, not
    the original string. Fixing `ParsePositiveIntPipe` alone wasn't enough.
    Added a second pipe, `StrictNumberFormatPipe`, registered globally
    ahead of `ValidationPipe`, that rejects non-plain-integer strings before
    that coercion happens. Verified against the compiled build: `GET
-   /posts/0x1` and `/posts/1e2` now 400 (were 502, having silently
+/posts/0x1` and `/posts/1e2` now 400 (were 502, having silently
    resolved to `/posts/1` upstream).
 
 **Verification:** lint (0 issues), typecheck, build, `prettier --check`,
@@ -48,6 +48,38 @@ contract tests skipped as designed (no `RUN_CONTRACT_TESTS`).
 **Docs touched:** `README-getting-started.md` (`TRUST_PROXY`),
 `README-architecture.md` (rate-limiting note, non-idempotent-retries note).
 
-## Groups 2–6 — not started
+## Group 2 — Bootstrap & logging consolidation — done (branch `cleanup/runtime-bugs`)
+
+1. **Shared `configureApp()`.** Added `src/bootstrap.ts`, exporting
+   `createFastifyAdapter()` (the `TRUST_PROXY` adapter options) and
+   `configureApp()` (registers `registerCorrelationIdHook`). Both `main.ts`
+   and `test/support/create-test-app.ts` now call into it instead of each
+   carrying its own copy of the adapter options and hook registration.
+2. **Three overlapping log lines on a failed request.** Removed
+   `LoggingInterceptor` — it duplicated pino-http's own per-request access
+   log, and unlike pino-http it never fired for an unmatched-route 404
+   (interceptors only run once a route matches). pino-http's `pinoHttp`
+   config in `app.module.ts` now carries `customLogLevel` (info/warn/error
+   by status code, matching what the interceptor used to do) and
+   `customProps` (tags each access-log line with the request's
+   `correlationId`, read off the raw `IncomingMessage` — see the
+   `registerCorrelationIdHook` and `fastify.d.ts` comments for why it's
+   stashed there too, not just on the `FastifyRequest` wrapper). A failed
+   5xx request now logs two lines (pino-http's access log, and
+   `AllExceptionsFilter`'s error log with the stack trace) instead of three;
+   everything else logs one instead of two.
+
+**Verification:** lint (0 issues), typecheck, build, `prettier --check`, and
+`vitest run` all clean — 309 tests passed, 3 contract tests skipped as
+designed. Also checked by hand against `npm run start` and the compiled
+`dist/src/main.js`: a 200, a 400, an unmatched-route 404, and a synthetic
+502 (`UPSTREAM_BASE_URL` pointed at a closed port) each produce the log
+lines described above, with the `correlationId` in the access log line
+matching the one in the response envelope.
+
+**Docs touched:** `README-architecture.md` (layout, request lifecycle,
+interceptor-ordering note, correlation-id gotcha).
+
+## Groups 3–6 — not started
 
 See the plan for scope.

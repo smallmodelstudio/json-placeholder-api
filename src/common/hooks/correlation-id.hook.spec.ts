@@ -30,7 +30,7 @@ describe('registerCorrelationIdHook', () => {
   };
 
   it('generates a correlation id when none is supplied', () => {
-    const request = { headers: {} } as unknown as FastifyRequest;
+    const request = { headers: {}, raw: {} } as unknown as FastifyRequest;
     const { reply, header } = makeReply();
     const done = vi.fn();
 
@@ -48,6 +48,7 @@ describe('registerCorrelationIdHook', () => {
   it('reuses an incoming correlation id header', () => {
     const request = {
       headers: { [CORRELATION_ID_HEADER]: 'incoming-id-123' },
+      raw: {},
     } as unknown as FastifyRequest;
     const { reply, header } = makeReply();
 
@@ -63,6 +64,7 @@ describe('registerCorrelationIdHook', () => {
   it('reuses the first value when the header is duplicated', () => {
     const request = {
       headers: { [CORRELATION_ID_HEADER]: ['first-id', 'second-id'] },
+      raw: {},
     } as unknown as FastifyRequest;
     const { reply } = makeReply();
 
@@ -74,6 +76,7 @@ describe('registerCorrelationIdHook', () => {
   it('ignores a blank incoming header and generates a new id', () => {
     const request = {
       headers: { [CORRELATION_ID_HEADER]: '   ' },
+      raw: {},
     } as unknown as FastifyRequest;
     const { reply } = makeReply();
 
@@ -99,7 +102,7 @@ describe('registerCorrelationIdHook', () => {
     const tracer = provider.getTracer('correlation-id.hook.spec');
 
     it('uses the active span trace id as the generated correlation id', () => {
-      const request = { headers: {} } as unknown as FastifyRequest;
+      const request = { headers: {}, raw: {} } as unknown as FastifyRequest;
       const { reply } = makeReply();
       const span = tracer.startSpan('incoming request');
 
@@ -114,6 +117,7 @@ describe('registerCorrelationIdHook', () => {
     it('still honours a client-supplied header over the active span', () => {
       const request = {
         headers: { [CORRELATION_ID_HEADER]: 'incoming-id-123' },
+        raw: {},
       } as unknown as FastifyRequest;
       const { reply } = makeReply();
       const span = tracer.startSpan('incoming request');

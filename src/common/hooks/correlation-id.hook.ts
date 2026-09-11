@@ -13,8 +13,9 @@ export const CORRELATION_ID_HEADER = 'x-correlation-id';
 // the Fastify instance because Nest middleware itself doesn't have this
 // property under Fastify: it runs through middie, which hands `use()` the
 // raw Node IncomingMessage rather than the FastifyRequest every downstream
-// consumer (LoggingInterceptor, TransformInterceptor, AllExceptionsFilter)
-// reads `correlationId` off.
+// consumer (TransformInterceptor, AllExceptionsFilter) reads `correlationId`
+// off. pino-http's own access log line reads the id back a different way —
+// see the `customProps` comment on the pinoHttp config in app.module.ts.
 export function registerCorrelationIdHook(instance: FastifyInstance): void {
   instance.addHook('onRequest', (request, reply, done) => {
     const incoming = request.headers[CORRELATION_ID_HEADER];
@@ -25,6 +26,10 @@ export function registerCorrelationIdHook(instance: FastifyInstance): void {
         : generateCorrelationId();
 
     request.correlationId = correlationId;
+    // Also stashed on the raw IncomingMessage — see the fastify.d.ts comment
+    // — since pino-http's access log (app.module.ts's pinoHttp.customProps)
+    // reads it from there, not from the FastifyRequest wrapper.
+    request.raw.correlationId = correlationId;
     void reply.header(CORRELATION_ID_HEADER, correlationId);
     done();
   });
