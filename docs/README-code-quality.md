@@ -7,12 +7,15 @@ they enforce.
 
 | Command | Tool | Config |
 | --- | --- | --- |
-| `npm run lint` | ESLint with `typescript-eslint`'s type-checked rules; formatting problems are reported as lint errors | `eslint.config.mjs` |
+| `npm run lint` | ESLint with `typescript-eslint`'s type-checked rules; formatting problems are reported as lint errors. Runs with `--fix`, so it rewrites files | `eslint.config.mjs` |
+| `npm run lint:check` | Same rules, no `--fix` — fails instead of rewriting | `eslint.config.mjs` |
 | `npm run format` | Prettier (single quotes, trailing commas) | `.prettierrc` |
 | `npm run typecheck` | tsgo (TypeScript 7), no emit | `tsconfig.json` |
 
-CI runs `lint`, `typecheck` and the unit tests in parallel. `lint` runs with
-`--fix`, so it rewrites files.
+CI runs `lint:check`, `typecheck` and the unit tests in parallel. Using `lint`
+(the auto-fixing one) in CI would let a formatting problem silently pass —
+the job rewrites the file and still exits 0. `lint:check` is for CI; use
+`lint` locally to fix what it finds.
 
 ## Two TypeScript versions
 

@@ -21,7 +21,8 @@ credits a month, and unlimited builds on self-hosted runners.
 ```text
 .harness/
   pipelines/ci.yaml               install → lint, typecheck, unit (in parallel) → e2e
-                                  → build and push image → promote tag (master only)
+                                  → build and push image → promote tag to both
+                                  overlays (master only)
   pipelines/cd.yaml               deploy to k3d → smoke test → manual approval
                                   → deploy to prod → smoke test
   pipelines/contract-tests.yaml   npm run test:contract
@@ -34,10 +35,13 @@ credits a month, and unlimited builds on self-hosted runners.
 ## How it works
 
 - **CI hands the image tag to CD through git.** CI's last step runs
-  `kustomize edit set image` on `k8s/overlays/local` with the tag it just built,
-  then commits and pushes the change. CD applies whatever is committed, so the
-  two pipelines share nothing but the repo. Harness's native alternative, the
-  "Kustomize Patches" manifest type, injects the tag at deploy time instead.
+  `kustomize edit set image` on both `k8s/overlays/local` and
+  `k8s/overlays/prod` with the tag it just built and pushed, then commits and
+  pushes the change. CD applies whatever is committed, so the two pipelines
+  share nothing but the repo, and a prod deploy — once approved — always
+  rolls out the exact image that passed CI and the local k3d smoke test, not
+  a separately-tracked tag. Harness's native alternative, the "Kustomize
+  Patches" manifest type, injects the tag at deploy time instead.
 - **The environment picks the overlay.** The service's manifest path is
   `k8s/overlays/<+env.variables.overlay>`, so one service definition serves both
   environments.
