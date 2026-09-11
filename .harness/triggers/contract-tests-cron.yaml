@@ -1,0 +1,13 @@
+trigger:
+  name: Nightly contract tests
+  identifier: nightly_contract_tests
+  enabled: true
+  orgIdentifier: default
+  projectIdentifier: json_placeholder_api
+  pipelineIdentifier: json_placeholder_api_contract_tests
+  source:
+    type: Scheduled
+    spec:
+      type: Cron
+      spec:
+        expression: "0 6 * * *" # 06:00 UTC daily

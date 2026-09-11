@@ -31,9 +31,9 @@ A [NestJS](https://nestjs.com/) proxy API in front of [JSONPlaceholder](https://
 
 ### Production hardening
 
-- **Caching:** GET responses are cached in-memory (`CACHE_TTL_MS`, default 30s) — check the `X-Cache: HIT`/`MISS` response header. `/health` is always excluded.
-- **Rate limiting:** requests are capped per IP (`THROTTLE_LIMIT` per `THROTTLE_TTL_MS`, default 20 per 60s); exceeding it returns `429`. `/health` is exempt so infra probes are never throttled.
-- **Health check:** `GET /health` pings JSONPlaceholder and returns `503` if it's unreachable — point liveness/readiness probes here.
+- **Caching:** GET responses are cached in-memory (`CACHE_TTL_MS`, default 30s) — check the `X-Cache: HIT`/`MISS` response header. `/health/*` is always excluded.
+- **Rate limiting:** requests are capped per IP (`THROTTLE_LIMIT` per `THROTTLE_TTL_MS`, default 20 per 60s); exceeding it returns `429`. `/health/*` is exempt so infra probes are never throttled.
+- **Health checks:** `GET /health/live` reports whether the process is up, with no dependency checks — point Kubernetes' liveness probe here. `GET /health/ready` pings JSONPlaceholder and returns `503` if it's unreachable — point the readiness probe here.
 
 ### API documentation
 
@@ -89,16 +89,131 @@ $ npm run test:contract
 
 ## Deployment
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
+### Docker
 
 ```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+# build the image (multi-stage — see Dockerfile)
+$ docker build -t json-placeholder-api:local .
+
+# or via compose, which also reads .env.example for local config
+$ docker compose up --build
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+The image runs as non-root `node`, forwards `SIGTERM` via `dumb-init` so
+`app.enableShutdownHooks()` (`src/app.module.ts`) actually fires, and exposes
+`GET /health/live` as its `HEALTHCHECK`.
+
+### Kubernetes (local, via k3d)
+
+Manifests live under `k8s/`: `base/` has the Deployment, Service, Ingress,
+ConfigMap, HPA, and PodDisruptionBudget; `overlays/local/` and
+`overlays/prod/` patch them per environment with Kustomize. Only `local` has
+been applied against a real cluster — `prod` is written to the same shape
+but points at placeholder registry/host values until a real cluster exists.
+
+The loop, build → import → apply → curl:
+
+```bash
+# 1. spin up a k3d cluster with an attached local registry
+$ ./k8s/k3d/create-cluster.sh
+
+# 2. build and push the image to that registry (published on localhost:5000)
+$ docker build -t localhost:5000/json-placeholder-api:local .
+$ docker push localhost:5000/json-placeholder-api:local
+
+# 3. apply the local overlay (1 replica, dev logging, Traefik ingress)
+$ kubectl apply -k k8s/overlays/local
+$ kubectl rollout status deployment/json-placeholder-api
+
+# 4. hit it through Traefik — no /etc/hosts edit needed, just set Host
+$ curl -H 'Host: api.localhost' http://localhost:8080/posts/1
+$ curl -H 'Host: api.localhost' http://localhost:8080/docs
+
+# tear down
+$ ./k8s/k3d/delete-cluster.sh
+```
+
+Two things worth knowing if you poke at this further:
+
+- **The image ref inside the cluster is not `localhost:5000/...`.** The host
+  can reach the registry at `localhost:5000` because k3d publishes that
+  port, but the node's containerd only has a registry mirror configured for
+  `k3d-jsonplaceholder-registry:5000` (see `k8s/k3d/create-cluster.sh`'s
+  `--registry-use`) — that's what `overlays/local`'s `images:` transformer
+  rewrites the tag to. Pushing to `localhost:5000` and deploying
+  `k3d-jsonplaceholder-registry:5000/...` is the same image; they're just
+  two different hostnames for the same registry container, seen from two
+  different network namespaces.
+- **`livenessProbe` → `/health/live`, `readinessProbe` → `/health/ready`**
+  (`k8s/base/deployment.yaml`), matching the split from the Docker phase —
+  liveness never depends on the upstream, so a bad JSONPlaceholder day
+  doesn't trigger a restart loop.
+
+### CI/CD (Harness)
+
+Pipeline-as-code lives under `.harness/`: a CI pipeline (lint, typecheck,
+unit, and e2e tests, then build/push the image and promote its tag into
+`k8s/overlays/local`), and a CD pipeline (roll out to the local k3d cluster
+from Phase 6, smoke-test it, then gate a prod rollout behind a manual
+approval). See `.harness/README.md` for the setup checklist — a Harness
+account, a Delegate installed into k3d, and a handful of connectors are
+required before any of it runs, none of which this repo can provide for you.
+
+### Observability
+
+The app emits OpenTelemetry traces, metrics, and (via
+[nestjs-pino](https://github.com/iamolegga/nestjs-pino)) structured JSON
+logs — vendor-neutral, so any OTLP-speaking backend works. `src/instrumentation.ts`
+does the actual instrumentation; it has to be loaded with `node --import`
+*before* Nest (and therefore Axios/`http`) is required, or OTel's
+auto-instrumentation patches miss their target. `npm run start:prod` and the
+Dockerfile's `CMD` both wire this up already; `npm run start`/`start:dev`
+don't (see the file's own header comment for why that's a deliberate scope
+cut, not an oversight).
+
+**Trace/log correlation:** the response envelope's `correlationId`
+(`src/common/hooks/correlation-id.hook.ts`) is the active span's OTel trace
+id whenever one exists, and every pino log line gets `trace_id`/`span_id`
+fields automatically (via `@opentelemetry/instrumentation-pino`) — so a
+response, its access-log line, and its trace all carry the same identifier
+without any manual plumbing. A client-supplied `x-correlation-id` header is
+still echoed back as-is (existing contract), so the two can legitimately
+diverge in that one case.
+
+**Custom metrics**, on top of what auto-instrumentation gives you for free
+(request rate/latency/error-rate, per route and status code):
+
+| Metric | What it means |
+|---|---|
+| `http_cache_lookups_total{result="hit\|miss"}` | `HttpCacheInterceptor` lookups |
+| `upstream_retries_total` | Retries `UpstreamService` issued against JSONPlaceholder |
+| `throttle_rejections_total` | Requests `ThrottlerGuard` rejected with 429 |
+
+**Local backend** — [`grafana/otel-lgtm`](https://github.com/grafana/docker-otel-lgtm),
+one container bundling Grafana + Tempo (traces) + Prometheus (metrics) +
+Loki (logs), wired together already:
+
+```bash
+$ docker compose up --build
+# Grafana: http://localhost:3001 (admin/admin) — Explore → Tempo/Prometheus/Loki
+```
+
+**In k3d**, the same image is deployed by `overlays/local` alongside the app
+(`k8s/overlays/local/otel.yaml`), with `OTEL_EXPORTER_OTLP_ENDPOINT` patched
+to point at it in-cluster:
+
+```bash
+$ kubectl apply -k k8s/overlays/local
+$ kubectl port-forward svc/otel-lgtm 3001:3000
+# Grafana: http://localhost:3001
+```
+
+**Not done, and why:** PLAN.md's Phase 8 also lists a Dynatrace trial (needs
+a real account signup this repo can't do for you — evaluate it by pointing
+`OTEL_EXPORTER_OTLP_ENDPOINT` at it once you have one; nothing else changes)
+and feeding these metrics into Harness's Continuous Verification (needs the
+real Harness tenant Phase 7 is still waiting on). Both are one-account away,
+not one-PR away.
 
 ## Resources
 

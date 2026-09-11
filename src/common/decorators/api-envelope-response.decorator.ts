@@ -49,7 +49,7 @@ export const ApiEnvelopedResponse = <TModel extends Type<unknown>>(
     ApiExtraModels(model),
     ApiResponse({
       status,
-      description,
+      ...(description !== undefined && { description }),
       schema: envelopeSchema(
         isArray
           ? { type: 'array', items: { $ref: getSchemaPath(model) } }
@@ -64,6 +64,6 @@ export const ApiEnvelopedResponse = <TModel extends Type<unknown>>(
 export const ApiEnvelopedEmptyResponse = (description?: string) =>
   ApiResponse({
     status: 200,
-    description,
+    ...(description !== undefined && { description }),
     schema: envelopeSchema({ type: 'object' }),
   });

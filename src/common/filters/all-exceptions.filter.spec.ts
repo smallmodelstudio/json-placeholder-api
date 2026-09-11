@@ -1,33 +1,47 @@
 import {
+  describe,
+  it,
+  beforeEach,
+  afterEach,
+  expect,
+  vi,
+  Mock,
+  MockInstance,
+} from 'vitest';
+import {
   ArgumentsHost,
   BadRequestException,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { ThrottlerException } from '@nestjs/throttler';
 import {
   UpstreamErrorType,
   UpstreamException,
 } from '../exceptions/upstream.exception';
+import { MetricsService } from '../metrics/metrics.service';
 import { AllExceptionsFilter } from './all-exceptions.filter';
 
 describe('AllExceptionsFilter', () => {
   let filter: AllExceptionsFilter;
-  let jsonMock: jest.Mock<void, [Record<string, unknown>]>;
-  let statusMock: jest.Mock;
+  let metrics: MetricsService;
+  let sendMock: Mock<(response: Record<string, unknown>) => void>;
+  let statusMock: Mock;
   let host: ArgumentsHost;
-  let errorSpy: jest.SpyInstance;
+  let errorSpy: MockInstance;
 
   beforeEach(() => {
-    filter = new AllExceptionsFilter();
-    jsonMock = jest.fn<void, [Record<string, unknown>]>();
-    statusMock = jest.fn().mockReturnValue({ json: jsonMock });
-    errorSpy = jest.spyOn(Logger.prototype, 'error').mockImplementation();
+    metrics = new MetricsService();
+    filter = new AllExceptionsFilter(metrics);
+    sendMock = vi.fn<(response: Record<string, unknown>) => void>();
+    statusMock = vi.fn().mockReturnValue({ send: sendMock });
+    errorSpy = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
 
     host = {
       switchToHttp: () => ({
         getRequest: () => ({
           method: 'GET',
-          originalUrl: '/posts/1',
+          url: '/posts/1',
           correlationId: 'corr-1',
         }),
         getResponse: () => ({ status: statusMock }),
@@ -49,7 +63,7 @@ describe('AllExceptionsFilter', () => {
     filter.catch(exception, host);
 
     expect(statusMock).toHaveBeenCalledWith(404);
-    expect(jsonMock).toHaveBeenCalledWith(
+    expect(sendMock).toHaveBeenCalledWith(
       expect.objectContaining({
         statusCode: 404,
         error: 'Not Found',
@@ -69,7 +83,7 @@ describe('AllExceptionsFilter', () => {
     filter.catch(exception, host);
 
     expect(statusMock).toHaveBeenCalledWith(502);
-    expect(jsonMock).toHaveBeenCalledWith(
+    expect(sendMock).toHaveBeenCalledWith(
       expect.objectContaining({ statusCode: 502, error: 'Bad Gateway' }),
     );
   });
@@ -94,7 +108,7 @@ describe('AllExceptionsFilter', () => {
     filter.catch(exception, host);
 
     expect(statusMock).toHaveBeenCalledWith(504);
-    expect(jsonMock).toHaveBeenCalledWith(
+    expect(sendMock).toHaveBeenCalledWith(
       expect.objectContaining({ error: 'Gateway Timeout' }),
     );
   });
@@ -107,7 +121,7 @@ describe('AllExceptionsFilter', () => {
     filter.catch(exception, host);
 
     expect(statusMock).toHaveBeenCalledWith(400);
-    expect(jsonMock).toHaveBeenCalledWith(
+    expect(sendMock).toHaveBeenCalledWith(
       expect.objectContaining({
         statusCode: 400,
         message: ['userId must be a positive number'],
@@ -120,7 +134,7 @@ describe('AllExceptionsFilter', () => {
     filter.catch(new Error('boom'), host);
 
     expect(statusMock).toHaveBeenCalledWith(500);
-    expect(jsonMock).toHaveBeenCalledWith(
+    expect(sendMock).toHaveBeenCalledWith(
       expect.objectContaining({
         statusCode: 500,
         error: 'Internal Server Error',
@@ -132,19 +146,38 @@ describe('AllExceptionsFilter', () => {
   it('includes path, timestamp, and correlationId on every envelope', () => {
     filter.catch(new NotFoundException(), host);
 
-    expect(jsonMock).toHaveBeenCalledWith(
+    expect(sendMock).toHaveBeenCalledWith(
       expect.objectContaining({
         path: '/posts/1',
         correlationId: 'corr-1',
       }),
     );
-    const envelope = jsonMock.mock.calls[0][0];
-    expect(envelope.timestamp).toEqual(expect.any(String));
+    const call = sendMock.mock.calls[0];
+    if (!call) {
+      throw new Error('expected sendMock to have been called');
+    }
+    expect(call[0]['timestamp']).toEqual(expect.any(String));
   });
 
   it('logs server errors (5xx) but the log call does not affect the response', () => {
     filter.catch(new Error('boom'), host);
 
     expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it('records a throttle-rejection metric for a ThrottlerException', () => {
+    const recordSpy = vi.spyOn(metrics, 'recordThrottleRejection');
+
+    filter.catch(new ThrottlerException(), host);
+
+    expect(recordSpy).toHaveBeenCalledOnce();
+  });
+
+  it('does not record a throttle-rejection metric for other exceptions', () => {
+    const recordSpy = vi.spyOn(metrics, 'recordThrottleRejection');
+
+    filter.catch(new NotFoundException(), host);
+
+    expect(recordSpy).not.toHaveBeenCalled();
   });
 });

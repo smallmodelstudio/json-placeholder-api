@@ -1,0 +1,40 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../../base
+
+# Unvalidated against a real cluster — there is no prod cluster in this
+# project yet (PLAN.md Phase 6 only targets local k3d). Written to the same
+# shape the local overlay proved out, so pointing it at a real registry and
+# ingress host is the only work left when that cluster exists.
+images:
+  - name: json-placeholder-api
+    newName: REPLACE_WITH_REAL_REGISTRY/json-placeholder-api
+    newTag: REPLACE_WITH_REAL_TAG
+
+replicas:
+  - name: json-placeholder-api
+    count: 3
+
+patches:
+  - target:
+      kind: Ingress
+      name: json-placeholder-api
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: REPLACE_WITH_REAL_HOST
+
+  - target:
+      kind: Deployment
+      name: json-placeholder-api
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: 250m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 512Mi

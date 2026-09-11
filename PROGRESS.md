@@ -1,184 +1,458 @@
 # NestJS Proxy API — Progress Ledger
 
-## Current Phase
-
-**All planned phases complete.** The project is at the end of PLAN.md's roadmap.
+See `PLAN.md` for the full roadmap and rationale behind the phase ordering.
 
 ## Completed Phases
 
-### [x] Phase 0: Foundation
+### Phase 1 — Jest → Vitest, and a test structure worth copying
 
-* **Build Changes:**
-  * Enabled strict TypeScript mode (`strict: true` in `tsconfig.json`).
-  * Installed dependencies: `@nestjs/config`, `@nestjs/axios`, `axios`, `class-validator`, `class-transformer`.
-  * Removed initial boilerplate (`app.controller.ts`, `app.service.ts`).
-* **Configuration Setup:**
-  * `src/config/config.types.ts`: Typed `AppConfig` interfaces.
-  * `src/config/env.validation.ts`: Class-validator schema for process environment.
-  * `src/config/configuration.ts`: Configuration factory.
-  * `.env` / `.env.example`: Environment templates created.
-* **Core Application Setup:**
-  * `src/app.module.ts`: Global `ConfigModule.forRoot` wired up.
-  * `src/main.ts`: Configured to pull port dynamic settings via typed `ConfigService`.
-* **Testing & Verification:**
-  * Unit tests (`src/config/env.validation.spec.ts`): 6/6 passing.
-  * E2E tests (`test/app.e2e-spec.ts`): 1/1 passing.
-  * Verified build (`npm run build`) and runtime crash prevention on invalid `NODE_ENV`.
+- Removed `jest`/`ts-jest`/`@types/jest`/`ts-node`/`tsconfig-paths`; added
+  `vitest`, `@vitest/coverage-v8`, `unplugin-swc`, `@swc/core`.
+- `vitest.config.mts` defines three **projects** (replacing the three old Jest
+  config files): `unit` (`src/**/*.spec.ts`), `e2e`
+  (`test/e2e/**/*.e2e.spec.ts`, nock-mocked), `contract`
+  (`test/contract/**/*.contract.spec.ts`, real network, gated by
+  `RUN_CONTRACT_TESTS=1`). Run one with `--project <name>`, all with
+  `npm run test:all`.
+- Moved `test/*.e2e-spec.ts` → `test/e2e/*.e2e.spec.ts`; renamed the contract
+  spec to `*.contract.spec.ts`. Colocated unit specs under `src/` untouched.
+- `test/support/create-test-app.ts` now takes an optional `configure` callback
+  (`TestingModuleBuilder` seam) for tests that need to swap a provider
+  entirely; `withEnvOverrides` remains the preferred path for config-value
+  overrides, since `ConfigModule.forRoot({ load: [configuration] })` re-reads
+  `process.env` fresh on every `compile()`.
+- All specs converted from Jest globals to explicit `import { ... } from
+  'vitest'` (no `test.globals`) — `jest.fn`→`vi.fn`, `jest.spyOn`→`vi.spyOn`,
+  `jest.Mock`→`Mock`, `jest.SpyInstance`→`MockInstance`.
+- Fixed two pre-existing type errors a from-scratch `tsc` surfaced
+  (`node_modules` had never actually been installed/type-checked before):
+  `timeout.interceptor.spec.ts`'s mocked `ConfigService` wasn't parameterized
+  to match `ConfigService<AppConfig, true>`; two `.mockImplementation()`
+  calls needed an explicit no-op function (Vitest requires one; Jest didn't).
+- `test/README.md` documents the pattern for adding each kind of test.
+- Verified: `npm run build`, `npm run lint` (0 errors; 95 pre-existing
+  `no-unsafe-argument` warnings on `app.getHttpServer()`, unrelated to this
+  phase), `npm run test:all` (258 passed, 3 contract tests skipped without
+  the env flag — also verified green with `RUN_CONTRACT_TESTS=1` for real).
 
-### [x] Phase 1: The Upstream Client
+### Phase 2 — TypeScript 6 as compiler, TypeScript 7 (`tsgo`) as type-checker
 
-* **Domain Error Type:**
-  * `src/common/exceptions/upstream.exception.ts`: `UpstreamException` (plain `Error` subclass, deliberately **not** an `HttpException`) with an `UpstreamErrorType` enum (`TIMEOUT`, `NETWORK_ERROR`, `BAD_RESPONSE`), an optional `upstreamStatus`, and the original error preserved via the native `Error` `cause` chain.
-* **Upstream Module & Service:**
-  * `src/upstream/upstream.module.ts`: `HttpModule.registerAsync` builds the axios instance from `ConfigService` (`http.baseUrl`, `http.timeoutMs`) — no hardcoded upstream URL anywhere in the app.
-  * `src/upstream/upstream.service.ts`: Typed `get/post/put/patch/delete<T>()` verbs, all routed through a private `request()` that:
-    * uses `firstValueFrom` to bridge the Observable back to a `Promise<T>`;
-    * retries via rxjs `retry({ count, delay })` with exponential backoff (`100ms * 2^(attempt-1)`), retrying on 5xx responses and on connection-level errors (no `response` at all), but **not** on 4xx;
-    * maps every terminal failure to an `UpstreamException` via `catchError`, preserving the upstream status code where one exists.
-  * `src/upstream/interfaces/upstream-request.interface.ts`: `UpstreamRequestOptions` (`params`, `headers`) shared by all verbs.
-  * Wired into `src/app.module.ts`.
-* **Testing & Verification:**
-  * Unit tests (`src/upstream/upstream.service.spec.ts`): 9/9 passing — success passthrough, params/body forwarding, retry-then-succeed on 5xx, no-retry on 4xx, retry exhaustion mapped to `UpstreamException`, network-error and timeout mapping, status-code preservation, non-axios error mapping.
-  * Full suite: 15/15 unit tests, 1/1 e2e test, clean `build` and `lint`.
-  * Live-verified against the real `jsonplaceholder.typicode.com` (not just mocks) with a throwaway script: confirmed `GET /posts/1` passthrough and `GET /posts/999999` → `UpstreamException` with `upstreamStatus: 404`. Script deleted after verification — not part of the codebase.
+- Bumped `typescript` to `^6.0.3` (GA final JS-based release). `nest build`
+  needed no `ignoreDeprecations` escape hatch: the only deprecation hit was
+  `baseUrl`, which was unused (no non-relative internal imports depend on
+  it — `moduleResolution: nodenext` resolves everything else) and was
+  removed outright rather than suppressed.
+- `experimentalDecorators`/`emitDecoratorMetadata` verified intact — full
+  suite (258 tests) still passes, so Nest's DI still resolves.
+- `typescript-eslint@8.67.0` (already installed) supports `typescript <6.1.0`
+  — no eslint bump needed; lint stays at 0 errors, 95 pre-existing
+  `no-unsafe-argument` warnings.
+- Added `@typescript/native-preview` (the real npm package for `tsgo`) as a
+  dev dependency and a `typecheck` script (`tsgo --noEmit -p tsconfig.json`).
+- Tightened `tsconfig.json`: added `noUncheckedIndexedAccess`,
+  `exactOptionalPropertyTypes`, `noImplicitOverride`, `noUnusedLocals`,
+  `noUnusedParameters`, `noPropertyAccessFromIndexSignature`. Fixed the
+  fallout:
+  - `process.env.X` → `process.env['X']` throughout (`configuration.ts`,
+    `upstream-mock.ts`, the contract spec) — `noPropertyAccessFromIndexSignature`.
+  - `UpstreamService`'s five HTTP methods and the five list-endpoint
+    services (`albums`/`comments`/`photos`/`posts`/`todos`) no longer pass
+    `params`/`headers`/`description` as explicit `undefined` — switched to
+    conditional object spreads (`...(x !== undefined && { key: x })`) so the
+    key is *absent* rather than present-with-undefined, per
+    `exactOptionalPropertyTypes`. `UpstreamService.toAxiosOptions()` centralizes
+    this for `get`/`post`/`put`/`patch`/`delete`.
+  - A handful of `noUncheckedIndexedAccess` gaps in test helpers
+    (`upstream.service.spec.ts`'s `respondWith`, the contract spec's
+    `posts[0]`, `all-exceptions.filter.spec.ts`'s `jsonMock.mock.calls[0]`)
+    got explicit undefined-guards instead of non-null assertions (no `!`
+    usage exists elsewhere in the codebase).
+  - `TimeoutInterceptor.intercept`'s unused `context` param renamed to
+    `_context` (still required by the `NestInterceptor` signature).
+- **Investigated, kept as-is**: `skipLibCheck: true`. Flipping it off is
+  cheap with `tsgo` (~0.4s) but immediately surfaces type errors inside
+  `@nestjs/cache-manager`, `unplugin`, `vite`, and `vitest`'s own `.d.ts`
+  files (missing optional-peer type packages like `esbuild`/`bun`/`rollup`,
+  and `exactOptionalPropertyTypes` mismatches in their own generic
+  defaults) — none fixable from this repo. `nest build` fails the same way,
+  confirming it's not just a `tsgo` quirk. Revisit once those upstream
+  packages ship cleaner declarations.
+- Verified: `npm run build`, `npm run lint` (0 errors, 95 pre-existing
+  warnings), `npm run typecheck` (`tsgo`, clean), `npm run test:all` (258
+  passed, 3 contract skipped), `npm run test:contract` (3 passed against
+  the real upstream).
 
-### [x] Phase 2: First Vertical Slice (Posts, read-only)
+### Phase 4 — Express → Fastify
 
-* **`PostsModule`:** `src/modules/posts/` — imports `UpstreamModule`, wired into `AppModule`.
-* **Entity:** `src/modules/posts/entities/post.entity.ts` — plain class (`id`, `userId`, `title`, `body`) with definite-assignment (`!`) fields, since instances come from parsed upstream JSON rather than `new Post()` construction. No Swagger decorators yet — deferred to Phase 7.
-* **`QueryPostsDto`:** `src/modules/posts/dto/query-posts.dto.ts` — optional `userId` (`@IsOptional @Type(() => Number) @IsInt @IsPositive`), validated/transformed by a **route-scoped** `new ValidationPipe({ transform: true, whitelist: true })` on `@Query()` in the controller. There is no global `ValidationPipe` yet (that's Phase 3), so this pipe instance is deliberately local to `PostsController#findAll` for now; it can likely be removed once the global pipe lands, since a global `ValidationPipe` would cover the same DTO.
-* **`ParsePositiveIntPipe`:** `src/common/pipes/parse-positive-int.pipe.ts` — hand-written custom pipe (learning goal, per plan) for the `:id` param; rejects non-integers, zero, and negatives with a `BadRequestException`. Handled natively by Nest's default exception filter (no custom filter exists yet), so it already returns a proper 400 JSON body.
-* **`PostsController` / `PostsService`:** `GET /posts` (optionally filtered by `?userId=`, passed through to upstream as a query param) and `GET /posts/:id`. Service is a thin passthrough to `UpstreamService.get()` — no error handling in the service itself, since `UpstreamException` mapping to HTTP responses is explicitly deferred to the Phase 3 exception filter. Right now an upstream 404/500 surfaces as an unhandled `UpstreamException` → Nest's default filter → 500, which is expected/known until Phase 3.
-* **Test support pattern (for all future E2E specs):**
-  * `test/support/create-test-app.ts` — shared `createTestApp()` bootstrap (mirrors `main.ts`; will matter once Phase 3 adds global pipes/filters). `test/app.e2e-spec.ts` refactored to use it.
-  * `test/support/upstream-mock.ts` — `mockUpstream()` nock scope helper, bound to `UPSTREAM_BASE_URL`.
-  * `test/support/nock-setup.ts` — registered via `setupFilesAfterEnv` in `test/jest-e2e.json`; calls `nock.disableNetConnect()` then `nock.enableNetConnect('127.0.0.1')` so unmocked upstream calls fail loudly while supertest's own loopback traffic to the app still works (blocking `127.0.0.1` too was an early gotcha — it broke supertest itself, not just real upstream calls). `nock.cleanAll()` after each test.
-* **Testing & Verification:**
-  * Unit tests: `parse-positive-int.pipe.spec.ts`, `posts.service.spec.ts`, `posts.controller.spec.ts` — 30/30 total unit tests passing across the project.
-  * E2E tests (`test/posts.e2e-spec.ts`): happy path for `GET /posts`, `?userId=` passthrough, `GET /posts/:id`, plus 400s from both the query DTO and `ParsePositiveIntPipe` — 6/6 e2e tests passing.
-  * Clean `npm run build` and `npm run lint` (0 errors; pre-existing `no-unsafe-argument` warnings only, on `supertest`'s `App` type — consistent with the rest of the test suite).
-  * Installed `nock` as a dev dependency.
+Implemented out of phase-number order, at explicit request; `PLAN.md`'s
+"Phase ordering and why" and Phase 4 sections were updated to reflect that
+Phase 4 no longer depends on Phase 3 (Pagination) — the two are independent,
+and only Phase 1's Vitest suite was a real prerequisite.
 
-### [x] Phase 3: Cross-cutting Concerns
+- `NestFactory.create<NestFastifyApplication>(AppModule, new FastifyAdapter())`
+  in `main.ts`; `app.listen({ port, host: '0.0.0.0' })` (the object form —
+  the positional `(port, address)` overload didn't resolve cleanly against
+  `ConfigService.get(...)`'s inferred type under `tsgo`; see below).
+  `@nestjs/platform-fastify` and `@fastify/static` added;
+  `@nestjs/platform-express` and `@types/express` removed.
+- **`CorrelationIdMiddleware` → a Fastify `onRequest` hook**
+  (`common/hooks/correlation-id.hook.ts`, `registerCorrelationIdHook()`),
+  *not* an interceptor as `PLAN.md` originally recommended. Tried the
+  interceptor first; it broke the existing "unknown route gets a 404 envelope
+  with a correlationId" e2e test, because Nest interceptors (and guards) only
+  run once a route has matched — an unmatched path never reaches one. The old
+  middleware ran unconditionally via `forRoutes('*')`, and `onRequest` is the
+  Fastify-native equivalent: fires before routing, for every request, matched
+  or not. Registered on the underlying Fastify instance in both `main.ts` and
+  `test/support/create-test-app.ts` (`app.getHttpAdapter().getInstance()`).
+- `all-exceptions.filter.ts`: `Request`/`Response` → `FastifyRequest`/
+  `FastifyReply`; `.status().json()` → `.status().send()`;
+  `request.originalUrl` → `request.url` (Fastify has no `originalUrl`, and
+  `request.url` already includes the query string, matching the old
+  behaviour and the existing e2e assertion on `path`).
+- `http-cache.interceptor.ts`: `request.path` (Express-only) →
+  `request.routeOptions.url` — the route *pattern*, not `request.url`, since
+  Fastify's `.url` includes the query string and would otherwise change the
+  `/health` cache-exclusion key per query string.
+- `transform.interceptor.ts` / `logging.interceptor.ts`: type-only swap to
+  `FastifyRequest`; `originalUrl` → `url` in the logging interceptor.
+- `common/types/express.d.ts` → `common/types/fastify.d.ts`
+  (`declare module 'fastify' { interface FastifyRequest { correlationId } }`).
+- `test/support/create-test-app.ts`: `createNestApplication<NestFastifyApplication>(new FastifyAdapter())`,
+  then `await app.getHttpAdapter().getInstance().ready()` before returning —
+  supertest hitting `getHttpServer()` before Fastify's async boot finishes
+  saw connection resets otherwise.
+- Verified: `npm run build`, `npm run lint` (0 errors, 95 pre-existing
+  warnings — same count as Phase 1/2), `npm run typecheck` (clean),
+  `npm run test:all` (259 passed, 3 contract skipped), `npm run test:contract`
+  (3 passed against the real upstream). Also ran the app directly (`npm run
+  start`) and curled it: `GET /posts/1` (200, enveloped, cache hit on second
+  call), `GET /nope` (404 envelope with a correlationId — the case the
+  interceptor approach missed), a client-supplied `x-correlation-id` echoed
+  on both the header and `meta.correlationId`, `GET /health` (200, confirmed
+  *not* cached across two calls), `GET /docs` (200, Swagger UI renders with
+  no extra `@fastify/static` wiring needed beyond the dependency itself).
 
-* **Everything lives in `AppModule`, not `main.ts`:** global `ValidationPipe`, `AllExceptionsFilter`, and the three interceptors are registered as `APP_PIPE`/`APP_FILTER`/`APP_INTERCEPTOR` providers inside `src/app.module.ts`, and `CorrelationIdMiddleware` is wired via `AppModule.configure()`. `main.ts` is unchanged — still just `NestFactory.create(AppModule)` + `app.listen()`. This means `test/support/create-test-app.ts` (`Test.createTestingModule({ imports: [AppModule] })` + `createNestApplication()` + `.init()`) automatically inherits every global provider identically to production, by construction — no manual mirroring between `main.ts` and the test helper is needed (stronger than the plan's literal ask to "update `createTestApp()` to mirror `main.ts`": there's nothing left to mirror, since both bootstrap paths converge on the same `AppModule`).
-* **Global `ValidationPipe`:** `whitelist: true`, `forbidNonWhitelisted: true`, `transform: true`, `transformOptions: { enableImplicitConversion: true }`. The route-scoped pipe on `PostsController#findAll` (Phase 2 stopgap) is removed — `@Query() query: QueryPostsDto` now relies entirely on the global pipe. Confirmed the global pipe correctly no-ops on `@Param('id', ParsePositiveIntPipe) id: number` (primitive-typed params are skipped by `ValidationPipe`'s `toValidate()`), so it composes cleanly with the custom pipe rather than conflicting with it.
-* **`AllExceptionsFilter`** (`src/common/filters/all-exceptions.filter.ts`): single `@Catch()` filter (no separate `UpstreamExceptionFilter` — PLAN.md listed that as "optional," and folding the `UpstreamException` handling into one filter avoids filter-ordering pitfalls). Envelope shape: `{ statusCode, message, error, path, timestamp, correlationId }`. Resolution logic:
-  * `UpstreamException` with `type: TIMEOUT` → 504 Gateway Timeout, always.
-  * `UpstreamException` with a 4xx `upstreamStatus` → passed through unchanged (e.g. upstream 404 stays 404 — meaningful to our own clients, not just a proxy failure).
-  * Any other `UpstreamException` (5xx `upstreamStatus`, or `NETWORK_ERROR` with no `upstreamStatus` at all) → 502 Bad Gateway.
-  * Any other `HttpException` (validation errors, `ParsePositiveIntPipe`'s `BadRequestException`, Nest's own unmatched-route 404) → formatted from its own `getStatus()`/`getResponse()`.
-  * Anything else (unexpected error) → generic 500, with the real error logged server-side via `Logger.error` but never leaked into the response body.
-  * Server errors (5xx) are logged; 4xx are not (expected client-caused noise).
-* **Interceptors**, bound globally in this order — `[Logging, Transform, Timeout]` — chosen deliberately for the onion-model execution order: Timeout ends up closest to the actual handler (correctly races the real work), Transform wraps the raw result into the envelope next, Logging is outermost so its duration measurement covers the whole request:
-  * `LoggingInterceptor` (`src/common/interceptors/logging.interceptor.ts`) — logs method/path/duration/correlationId on success (`Logger.log`) or the error message on failure (`Logger.warn`). Deliberately does **not** log `response.statusCode`: Nest doesn't actually set that on the raw `Response` object until *after* the interceptor chain resolves, so reading it here would silently be stale/misleading.
-  * `TransformInterceptor` (`src/common/interceptors/transform.interceptor.ts`) — wraps every successful response in `{ data, meta: { timestamp, correlationId } }`. This changes the shape of every existing success response (see `posts.e2e-spec.ts` updates below).
-  * `TimeoutInterceptor` (`src/common/interceptors/timeout.interceptor.ts`) — rxjs `timeout()` → `GatewayTimeoutException` (504). **Reconciles with the Phase 1 "single timeout mechanism" decision**: this is a different concern, not a duplicate. Axios's own timeout (Phase 1) remains the authoritative, primary mechanism for upstream-latency 504s. This interceptor is a wider backstop covering the *whole* request lifecycle (in-process work, future multi-call routes), sized via `timeoutMs * (maxRetries + 2)` — one full extra `timeoutMs` of headroom beyond `UpstreamService`'s own worst case (`timeoutMs * (maxRetries + 1)` plus negligible backoff), so under normal conditions the axios-level timeout always fires first and this only catches requests stuck for some other reason.
-* **`CorrelationIdMiddleware`** (`src/common/middleware/correlation-id.middleware.ts`): reuses an incoming `x-correlation-id` request header if present and non-blank, otherwise generates one via `crypto.randomUUID()`; always echoes it back on the response header. Applied via `consumer.apply(CorrelationIdMiddleware).forRoutes('*')` — runs for every request, including ones that hit no matching route, so `AllExceptionsFilter`'s unmatched-route 404 envelope always has a real `correlationId`. Required a small `declare global { namespace Express { interface Request { correlationId: string } } }` augmentation (`src/common/types/express.d.ts`) since this is a custom property on Express's `Request`.
-* **Testing & Verification:**
-  * Unit tests: `all-exceptions.filter.spec.ts`, `logging.interceptor.spec.ts`, `transform.interceptor.spec.ts`, `timeout.interceptor.spec.ts`, `correlation-id.middleware.spec.ts` — 46/46 total unit tests passing across the project.
-  * E2E: `test/errors.e2e-spec.ts` (new) covers the full cross-cutting surface — success envelope shape, correlation-id echo/generation, 400 validation envelope with field-level `message` array, upstream 500 → 502, upstream timeout → 504, upstream 404 passthrough, unknown route → 404 envelope. `test/posts.e2e-spec.ts` updated to assert `response.body.data` instead of the raw payload, since `TransformInterceptor` now wraps every success response. 14/14 e2e tests passing.
-  * **nock gotcha:** `replyWithError({ code: 'ECONNABORTED' })` hangs indefinitely under the installed nock version (14.x, MSW-interceptor-based) — confirmed via a throwaway script before spending time debugging it in Jest. Used `.delayConnection(ms)` against a short, test-local axios timeout instead, which reliably produces a genuine `ECONNABORTED` — this is the pattern the timeout E2E test uses.
-  * **Env override for a fast timeout E2E test:** the real `.env` timeout/retry values would make a true end-to-end timeout test slow (worst case ~15s+ with defaults). `test/support/with-env-overrides.ts` temporarily overrides `process.env.UPSTREAM_TIMEOUT_MS`/`UPSTREAM_MAX_RETRIES` for the duration of one test, restoring them after. Works because `@nestjs/config`'s dotenv loading never overrides a key already present in `process.env`, and each `createTestApp()` call re-instantiates `ConfigModule` fresh — so setting the override *before* calling `createTestApp()` inside the callback wins.
-  * Clean `npm run build` and `npm run lint` (0 errors). Fixing lint cleanly (not just suppressing) surfaced a few real TS-strictness patterns worth remembering: `expect.any(X)` used as an *object-literal property value* trips `no-unsafe-assignment` (its declared return type is `any`) even though the same matcher passed directly as a bare argument to `toEqual`/`toHaveBeenCalledWith` is fine (governed by `no-unsafe-argument`, downgraded to `warn` in this project's eslint config) — the fix is asserting dynamic fields (`timestamp`, `correlationId`) as separate standalone `expect(...)` calls rather than embedding them in `objectContaining`/`toMatchObject`. Comparing a plain `number` against an `HttpStatus` enum member with `>=` trips `no-unsafe-enum-comparison`; an inline `as number` cast gets stripped right back out by `no-unnecessary-type-assertion`'s autofix, so the working fix is a module-level `const` explicitly typed `number`.
-  * Live-verified against the real `jsonplaceholder.typicode.com` (started the app with `npm run start`, `curl`'d it, killed it after): confirmed the `{data, meta}` envelope, upstream-404 passthrough, unmatched-route 404 envelope, validation-rejection 400 with field messages, and correlation-id echo/generation all behave as intended outside of mocks too.
+### Phase 5 — Docker
 
-### [x] Phase 4: Writes on Posts
+Implemented out of phase-number order, at explicit request — Phase 3
+(Pagination) is still not started; Docker didn't depend on it (see
+`PLAN.md`'s "Phase ordering and why": pagination is independent feature
+work, not a platform prerequisite).
 
-* **Dependency:** Installed `@nestjs/swagger` (`^11.4.7`) — not for docs yet (that's Phase 7), just for its `PartialType` mapped-type helper.
-* **DTOs:**
-  * `src/modules/posts/dto/create-post.dto.ts`: `title`/`body` (`@IsString @IsNotEmpty`), `userId` (`@Type(() => Number) @IsInt @IsPositive`) — same explicit-`@Type` style as `QueryPostsDto`, even though the global `ValidationPipe`'s `enableImplicitConversion` would likely cover a JSON-body number too; kept for consistency with the existing DTO.
-  * `src/modules/posts/dto/update-post.dto.ts`: `UpdatePostDto extends PartialType(CreatePostDto)` — a single DTO reused for both `PUT` and `PATCH`, per the plan. All fields optional; JSONPlaceholder doesn't distinguish full-replace vs partial-update semantics server-side anyway.
-* **`PostsService`:** added `create` (`upstream.post`), `update` (`upstream.put`), `patch` (`upstream.patch`), `remove` (`upstream.delete`) — all thin passthroughs, consistent with the existing `findAll`/`findOne` style. `remove` returns `Promise<object>` since JSONPlaceholder's `DELETE` responds `200 {}` rather than `204 No Content`, and the response still needs to flow through `TransformInterceptor`'s `{ data, meta }` envelope.
-* **`PostsController`:** added `@Post()` (201, `CreatePostDto` body), `@Put(':id')`/`@Patch(':id')` (200, `ParsePositiveIntPipe` id + `UpdatePostDto` body), `@Delete(':id')` (200, `ParsePositiveIntPipe` id). Nest's `Post` decorator is imported as `HttpPost` to avoid colliding with the `Post` entity class name already in scope.
-* **Testing & Verification:**
-  * Unit tests: `posts.service.spec.ts` and `posts.controller.spec.ts` extended with `create`/`update`/`patch`/`remove` cases (call-contract assertions + error propagation, matching the existing `findAll`/`findOne` pattern) — 58/58 unit tests passing across the project.
-  * E2E (`test/posts.e2e-spec.ts`): nocked passthrough for all four write verbs, plus 400s for missing required fields, an unknown/whitelisted-out property (`forbidNonWhitelisted`), a non-positive-integer `:id`, and an invalid field type (`userId: 'not-a-number'`) — 24/24 e2e tests passing.
-  * Clean `npm run build` and `npm run lint` (0 errors; same pre-existing `supertest`/`App` `no-unsafe-argument` warnings as prior phases).
-  * Live-verified against the real `jsonplaceholder.typicode.com` (`npm run start`, `curl`'d, killed after): confirmed `POST` returns a plausible new resource (`id: 101`), `PUT`/`PATCH`/`DELETE` all return `200` with the expected envelope, and the validation 400 lists field-level messages for a payload missing `body`/`userId`. Confirms the "JSONPlaceholder fakes persistence" behavior firsthand — a `GET` after these writes would not reflect them.
-* **README:** added a "Description" section replacing the stock Nest boilerplate line, plus a note that `POST`/`PUT`/`PATCH`/`DELETE` on `/posts` proxy through correctly but JSONPlaceholder doesn't actually persist writes, so it doesn't look like a proxy bug later.
+- `Dockerfile`: three stages — `deps` (`npm ci`), `build` (`nest build`
+  then `npm prune --omit=dev` to strip devDependencies out of
+  `node_modules`), `runtime` (nothing copied in but `dist/`, the pruned
+  `node_modules/`, and `package.json`). Base image is `node:24-slim`, not
+  the Node 22 LTS `PLAN.md` sketched — `.nvmrc` already pins `v24.16.0`,
+  and matching the dev environment took precedence over the stale
+  recommendation.
+- Non-root: runs as the `node` user the base image already provides
+  (uid/gid 1000); runtime-stage `COPY --chown=node:node` so it can
+  actually read what was copied in as root.
+- Signal handling: `dumb-init` (via `apt-get`) as `ENTRYPOINT`, `CMD
+  ["node", "dist/src/main.js"]`. Chose baking it into the image over
+  Compose's `init: true` — this image is also what Phase 6 deploys into
+  Kubernetes, which has no equivalent flag, so the image needs to own its
+  own PID 1 regardless of orchestrator.
+- `HEALTHCHECK` shells out to `node -e` hitting `/health/live` over
+  `node:http` — no `curl`/`wget` needed on `-slim`.
+- **Health endpoints split** (`src/health/health.controller.ts`): the old
+  bare `GET /health` (ping-the-upstream) is gone, replaced by
+  `GET /health/live` (no indicators — Terminus's `check([])`, never fails
+  on upstream trouble) and `GET /health/ready` (same upstream ping the old
+  route did). `/health/startup` stayed optional/unimplemented — nothing
+  in `PLAN.md`'s Phase 6 sketch wires a startup probe. Updated
+  `health.controller.spec.ts`, `test/e2e/health.e2e.spec.ts`, and
+  `test/e2e/throttle.e2e.spec.ts` (which exercised the old route to prove
+  the throttle exemption). `HttpCacheInterceptor`'s `/health` exclusion
+  and the Swagger tag needed no code change — the interceptor already
+  matched on a `startsWith('/health')` prefix.
+- Fixed `package.json`'s `start:prod`, which ran `node dist/main` — the
+  actual compiled entrypoint is `dist/src/main.js`
+  (`nest-cli.json`'s `sourceRoot: src` nests build output under
+  `dist/src/`). Silently broken since before Phase 1; nothing had run it
+  until the Dockerfile needed the real path.
+- `docker-compose.yml`: single `app` service building the same
+  `Dockerfile`, `.env.example` as `env_file` (copy to `.env` and edit for
+  local overrides — gitignored), left a comment marking where Phase 8
+  adds an `otel` service.
+- `.dockerignore`: excludes `node_modules`/`dist`/`coverage` (rebuilt
+  fresh in-image), `.git`, `test/`, `*.md`, `.env*` (config is supplied at
+  `docker run`/compose time, never baked in).
+- Verified directly with `docker build` + `docker run`: image size 451MB
+  (Nest + Swagger + Terminus's dependency tree on `-slim`, not bloat —
+  `npm prune --omit=dev` confirmed working); `process.getuid()` inside the
+  container → 1000, confirming non-root; `docker stop` on a running
+  container logged `AppModule`'s `onApplicationShutdown` and exited in
+  ~0.25s, confirming `dumb-init` forwards `SIGTERM` to the real process
+  rather than the container hanging to the orchestrator's kill timeout;
+  `--env-file .env.example` verified end-to-end (`GET /posts/1`,
+  `GET /health/live`, `GET /health/ready` all correct). `docker compose
+  up` needed a second run on an unmapped port to confirm cleanly: this
+  sandbox already has an unrelated host process bound to `0.0.0.0:3000`,
+  so `localhost:3000` from the host resolved to that process rather than
+  Docker's forwarded port — confirmed not a `docker-compose.yml` defect by
+  hitting the same route from inside the container (200) and via a
+  container run on a free host port (200). Full suite still green (261
+  passed, 3 contract skipped) after the health-endpoint split; `npm run
+  lint` (0 errors, 96 pre-existing `no-unsafe-argument` warnings — one
+  more than before, from the new e2e assertions) and `npm run typecheck`
+  both clean.
 
-### [x] Phase 5: Remaining Resources + Nested Routes
+### Phase 6 — Kubernetes, locally
 
-* **Scope decision (checked with the user before starting):** full CRUD (`GET` list/one + `POST`/`PUT`/`PATCH`/`DELETE`) for all five remaining resources, matching Posts exactly — not read-only. Hand-write each resource longhand rather than extracting a generic base service/controller, per PLAN.md's own caveat that premature generics tend to fight Nest's DI system; the four post-Users resources (Comments/Todos/Albums/Photos) turned out simple and near-identical enough that this held up fine with no abstraction regretted.
-* **New modules, each following the exact Posts shape** (`entities/`, `dto/{query,create,update}-*.dto.ts`, `*.service.ts`, `*.controller.ts`, `*.module.ts`, plus `.spec.ts` for service and controller):
-  * `src/modules/comments/` — `Comment { id, postId, name, email, body }`. `CreateCommentDto.email` uses `@IsEmail()`.
-  * `src/modules/todos/` — `Todo { id, userId, title, completed }`. `CreateTodoDto.completed` uses `@IsBoolean()`.
-  * `src/modules/photos/` — `Photo { id, albumId, title, url, thumbnailUrl }`. `CreatePhotoDto.url`/`thumbnailUrl` use `@IsUrl()`.
-  * `src/modules/albums/` — `Album { id, userId, title }`.
-  * `src/modules/users/` — `User { id, name, username, email, address, phone, website, company }`, with nested `Address { street, suite, city, zipcode, geo }`, `Geo { lat, lng }`, `Company { name, catchPhrase, bs }` classes. First use of nested DTO validation: `CreateUserDto` uses private `GeoDto`/`AddressDto`/`CompanyDto` classes (declared in the same file, not exported — only `CreateUserDto` needs them) with `@ValidateNested() @Type(() => XDto)`. `Geo.lat`/`lng` use `@IsLatitude()`/`@IsLongitude()` (accept JSONPlaceholder's numeric-string format directly). `phone`/`website` deliberately left as plain `@IsString()` rather than stricter validators (`@IsPhoneNumber()`, `@IsUrl()`) since real JSONPlaceholder fixture data (`"1-770-736-8031 x56442"`, `"hildegard.org"` with no protocol) wouldn't pass them.
-  * `UpdateXDto = PartialType(CreateXDto)` for every resource, same pattern as `UpdatePostDto`.
-* **Nested routes — owned by the parent path's controller, not a separate router:**
-  * `GET /posts/:id/comments` on `PostsController`, backed by `PostsService.findComments()` which now takes `CommentsService` as a constructor dependency and delegates to `CommentsService.findAll({ postId })` — reuses the existing query-filter logic rather than duplicating an upstream call.
-  * `GET /users/:id/posts`, `GET /users/:id/todos`, `GET /users/:id/albums` on `UsersController`, backed by `UsersService` delegating to `PostsService.findAll({ userId })` / `TodosService.findAll({ userId })` / `AlbumsService.findAll({ userId })` respectively.
-  * `GET /albums/:id/photos` on `AlbumsController`, backed by `AlbumsService.findPhotos()` delegating to `PhotosService.findAll({ albumId })`.
-  * This makes the module dependency graph a DAG: `PostsModule` imports `CommentsModule`; `AlbumsModule` imports `PhotosModule`; `UsersModule` imports `PostsModule`, `TodosModule`, `AlbumsModule`. Every module that's a nested-route dependency also `exports` its service. `AppModule` imports all six feature modules directly (not relying on transitive re-imports) so route registration doesn't depend on the nested-route wiring staying intact.
-  * Route ordering is a non-issue: `:id/comments` (two path segments) never collides with `:id` (one segment) in Nest's underlying path-to-regexp matching, so no explicit ordering care was needed.
-* **`Post` decorator/entity name collision:** both `PostsController` and `UsersController` import the `Post` entity class (Users needs it for the `findPosts` nested route) alongside `@nestjs/common`'s `Post` HTTP-method decorator — both import the decorator as `HttpPost`, same fix as Phase 4. No other resource name collides with a Nest decorator.
-* **Real bug caught by E2E testing, not just a test-writing mistake:** `@ValidateNested()` alone does **not** enforce that a nested property is present — it only recurses into validating a nested object's own fields *if* the object exists; sending a `CreateUserDto` payload with `address` omitted entirely passed validation and fell through to a real (unmocked) upstream call, which nock correctly rejected as a network error, surfacing as an unexpected 502 in an E2E test that expected 400. Fixed by adding `@IsNotEmptyObject()` ahead of `@ValidateNested()` on `address`, `company` (`CreateUserDto`) and `geo` (`AddressDto`) — confirmed live afterward (`"address must be a non-empty object"`). Worth remembering for any future nested-object DTO: `@ValidateNested()` needs a presence/type check alongside it, it doesn't provide one itself.
-* **`enableImplicitConversion` coerces booleans in a way that can silently defeat a negative test:** the global `ValidationPipe`'s implicit conversion runs `Boolean(value)` against any string for a `boolean`-typed field, and `Boolean(x)` is truthy for *every* non-empty string — so `completed: 'yes'` on `CreateTodoDto` doesn't fail `@IsBoolean()`, it gets silently coerced to `true` and passes. There's no string value that can trigger this specific validation failure; the Todos E2E "invalid completed" test was rewritten to omit the field entirely (`undefined` correctly fails `@IsBoolean()` since there's no `@IsOptional()`) rather than sending a bad value for it.
-* **Testing & Verification:**
-  * Unit tests: full `findAll`/`findOne`/`create`/`update`/`patch`/`remove` coverage for all five new services + controllers, plus dedicated cases for the three new nested-route methods (`PostsService.findComments`, `AlbumsService.findPhotos`, and `UsersService.findPosts`/`findTodos`/`findAlbums`) asserting the delegate-to-sibling-service call contract — 167/167 unit tests passing across the project (up from 61).
-  * E2E: `test/{comments,todos,photos,albums}.e2e-spec.ts` (new, one per resource — happy-path CRUD + one representative validation 400 each) and `test/users.e2e-spec.ts` (new — full CRUD, missing-nested-object 400, invalid-lat/lng 400, plus all three nested routes). `test/posts.e2e-spec.ts` extended with `GET /posts/:id/comments`. 77/77 e2e tests passing (up from 24).
-  * Clean `npm run build` and `npm run lint` (0 errors; same pre-existing `supertest`/`App` `no-unsafe-argument` warnings as prior phases, now duplicated across the additional e2e spec files).
-  * Live-verified against the real `jsonplaceholder.typicode.com` (`npm run start`, `curl`'d, killed after): all five nested-route endpoints return real filtered data; `POST /users` with a full nested address/company payload succeeds and echoes a new `id`; the same payload with `address` omitted returns the expected 400 with `"address must be a non-empty object"`; `DELETE /albums/1` returns `200 {}`.
+Implemented out of phase-number order, at explicit request — Phase 3
+(Pagination) is still not started; it was never a prerequisite for this
+phase either (see `PLAN.md`'s "Phase ordering and why": Phase 6 only
+depends on Phase 5's Docker image).
 
-### [x] Phase 6: Production hardening
+- `k3d` wasn't installed, and the official install script defaults to
+  `/usr/local/bin` via `sudo` — this environment has no passwordless
+  `sudo` and no terminal for an interactive password prompt. Installed to
+  `~/.local/bin` instead (`K3D_INSTALL_DIR=/home/fred/.local/bin
+  USE_SUDO=false`), which was already on `PATH` and needed no privilege
+  escalation.
+- `k8s/base/`: `deployment.yaml` (2 replicas, `envFrom` a ConfigMap,
+  liveness → `/health/live`, readiness → `/health/ready`,
+  `terminationGracePeriodSeconds: 30`), `service.yaml` (ClusterIP :80 →
+  `http`), `ingress.yaml` (Traefik `ingressClassName`, placeholder host —
+  every overlay patches it), `configmap.yaml` (mirrors `.env.example`),
+  `hpa.yaml` (`autoscaling/v2`, CPU-based, 2–5 replicas), `pdb.yaml`
+  (`minAvailable: 1`), `kustomization.yaml` tying them together.
+- `k8s/overlays/local/`: 1 replica, `NODE_ENV=development` (the only
+  "debug logging" lever the app actually exposes — there's no `LOG_LEVEL`
+  in `src/config`), smaller resource requests/limits, HPA range trimmed to
+  1–3 so `minReplicas` doesn't exceed the overlay's own replica count,
+  `host: api.localhost`, and an `images:` transformer pointing at the
+  local registry.
+- `k8s/overlays/prod/`: 3 replicas, production-sized resources, same
+  shape as `local` — but genuinely untested, since there's no real cluster
+  to apply it to. Registry/tag/host are literal `REPLACE_WITH_REAL_*`
+  placeholders rather than guessed values.
+- `k8s/k3d/create-cluster.sh` / `delete-cluster.sh`: creates a
+  `k3d-jsonplaceholder-registry` registry plus a `jsonplaceholder` cluster
+  wired to use it, with the loadbalancer's 80/443 mapped to host 8080/8443
+  (not 80/443 — nothing else on this host was using them, but the higher
+  ports avoid needing any privilege check at all and are the more common
+  k3d convention).
+- **Registry hostname trap**: the host reaches the registry at
+  `localhost:5000` (k3d publishes that port), but the *node's* containerd
+  only gets a mirror entry for `k3d-jsonplaceholder-registry:5000` (from
+  `--registry-use`) — confirmed by reading
+  `/etc/rancher/k3s/registries.yaml` inside the server container. A first
+  attempt with `overlays/local` pointing at `localhost:5000/...` produced
+  `ImagePullBackOff` (`dial tcp [::1]:5000: connect: connection refused`
+  from inside the node). Fixed by making the overlay's `images:`
+  transformer rewrite to `k3d-jsonplaceholder-registry:5000/...` instead —
+  same registry, two different hostnames depending which network
+  namespace you're asking from. Documented in `README.md` since it's the
+  kind of thing that looks like a k3d bug the first time you hit it.
+- Verified end-to-end against the real cluster: `kubectl apply -k
+  k8s/overlays/local` → all six resources created; `kubectl rollout
+  status` → succeeded after the registry-hostname fix; pod `1/1 Running`;
+  `kubectl get hpa` showed real CPU metrics (`4%/70%`) — k3s ships
+  `metrics-server` out of the box, no extra install needed. Through
+  Traefik: `curl -H 'Host: api.localhost' http://localhost:8080/posts/1`
+  → 200, enveloped `{ data, meta }`; `/health/live` → 200; `/health/ready`
+  → 200; `/docs` → 200, Swagger UI. `kubectl kustomize` on both overlays
+  confirmed to render without error (only `local` applied to the cluster).
+- Not done: no CI for any of this yet (Phase 7), and `prod` overlay
+  remains unvalidated against a real cluster by design — see above.
 
-* **Dependencies:** Installed `@nestjs/cache-manager` (`^3.1.3`) + `cache-manager` (`^7.2.9`, brings its own default in-memory Keyv store — no separate `keyv` dependency or explicit `stores` option needed), `@nestjs/throttler` (`^6.5.0`), `@nestjs/terminus` (`^11.1.1`).
-* **Config:** `AppConfig` gains `cache: { ttlMs }` and `throttle: { ttlMs, limit }`, validated in `env.validation.ts` and sourced from new env vars `CACHE_TTL_MS` (default 30000), `THROTTLE_TTL_MS` (default 60000), `THROTTLE_LIMIT` (default 20) — same `configuration.ts` factory pattern as the existing `http` block.
-* **`CacheModule`** (`@nestjs/cache-manager`), registered globally via `CacheModule.registerAsync` in `AppModule` with the default TTL from config:
-  * **`HttpCacheInterceptor`** (`src/common/interceptors/http-cache.interceptor.ts`) — subclasses the library's `CacheInterceptor` and overrides `trackBy()` to return `undefined` (never cache) for any `/health` path; everything else falls through to the default GET-and-request-URL cache key. Bound globally as `APP_INTERCEPTOR`. This is the standard Nest-documented pattern for customizing cache-key behavior — no need to touch the constructor, DI on `cacheManager`/`reflector`/`httpAdapterHost` is inherited from the base class.
-  * **Interceptor order updated to `[Logging, Transform, Cache, Timeout]`** (was `[Logging, Transform, Timeout]`): Cache sits between Transform and Timeout so that on a cache hit, Transform still runs and wraps the cached raw data in a *fresh* envelope (new `timestamp`/`correlationId` per response — confirmed live), while Timeout and the real handler (and thus the real upstream call) are skipped entirely. `CacheInterceptor` itself only ever intercepts GET requests (checked internally via `isRequestCacheable`), so writes are unaffected without any extra code.
-  * **Per-route TTL override, demonstrated on `PostsController.findOne`:** `@CacheTTL(60_000)` (vs. the global 30s default) — a single post by id is far less likely to need a fresh look than a filterable list query. Not replicated across all six resources' `:id` routes: the mechanism is identical everywhere via the global interceptor, and mechanically repeating the same override six times would be low-value duplication rather than genuine per-route reasoning.
-  * Confirmed live via `curl -D-`: `CacheInterceptor` sets an `X-Cache: MISS`/`X-Cache: HIT` response header automatically — first `GET /posts/1` returned `MISS`, immediate second returned `HIT` with the same `data` but a different `correlationId`/`timestamp`.
-* **`ThrottlerModule`** global guard — first Guard in the project. `ThrottlerModule.forRootAsync` configured from `throttle.ttlMs`/`throttle.limit`; `ThrottlerGuard` bound globally as `APP_GUARD`. **`@SkipThrottle()`** on `HealthController` — infra liveness/readiness probes must never be rate-limited. Confirmed live: request 21 and 22 to `/posts` within the default 20-req/60s window returned `429`, while `/health` kept returning `200` throughout.
-* **`HealthModule`** (`src/health/`) — `@nestjs/terminus`, at `GET /health`:
-  * `HealthController` uses `HealthCheckService` + `HttpHealthIndicator.pingCheck('upstream', ...)` against `{http.baseUrl}/posts/1` (JSONPlaceholder has no dedicated ping endpoint; a small, always-present resource stands in for one).
-  * `HealthModule` imports its own `HttpModule.registerAsync` (reusing `http.timeoutMs` from config) rather than relying on `HttpHealthIndicator`'s `moduleRef.get(HttpService, {strict:false})` cross-module fallback lookup, which would have implicitly (and confusingly) reused `UpstreamModule`'s axios instance — an explicit, self-contained module dependency was judged clearer than leaning on that fallback.
-  * On success: flows through the normal global interceptor stack like every other route, so the terminus result shape (`{status, info, error, details}`) ends up nested under our own `{data, meta}` envelope — no special-casing, consistent with the rest of the API. Confirmed live against the real upstream: `{"data":{"status":"ok","info":{"upstream":{"status":"up"}},...}}`.
-  * On failure: `HealthCheckService.check()` throws `ServiceUnavailableException(result)` (503), caught by the existing `AllExceptionsFilter`. **Known envelope quirk, accepted rather than special-cased:** the filter's `resolveHttpException` expects a `{message?, error?}` body shape; terminus's body has no `message` key (falls back to the generic exception message) and its `error` key is an object (per-indicator failure details), not the short string the rest of the app's error envelope normally carries there. Functionally harmless (still serializes fine, still a 503), just not as tightly typed as other error responses — not worth a terminus-specific branch in the filter for this project's scope.
-* **Graceful shutdown:** `main.ts` calls `app.enableShutdownHooks()`. `AppModule` implements `OnApplicationShutdown`, logging the received signal. This isn't just a logging nicety — enabling shutdown hooks is what lets Terminus's internal `HealthCheckExecutor` (which implements `beforeApplicationShutdown`) mark the app `shutting_down` during the shutdown window, so `/health` can reflect that state if polled during a real deploy. Confirmed live: `kill -TERM` on the running process logged `[AppModule] Shutting down (signal: SIGTERM)` and the process exited with no dangling port/handle.
-* **Testing & Verification:**
-  * Unit tests: `http-cache.interceptor.spec.ts` (trackBy excludes `/health`, falls back to the default URL key otherwise — protected method exercised via a typed cast, base class's `httpAdapterHost` faked since it's normally property-injected by Nest), `health.controller.spec.ts` (call-contract: `check()` invokes `HealthCheckService.check` with an indicator that pings the configured base URL) — 170/170 unit tests passing across the project (up from 167).
-  * E2E: `test/cache.e2e-spec.ts` (new — second `GET /posts` and second `GET /posts/:id` within the TTL served from cache without a second nock mock being registered; cache keys differentiated per query string; writes proven never cached via `scope.isDone()`), `test/throttle.e2e-spec.ts` (new — 429 after the configured limit via `withEnvOverrides`; `/health` exempt even at `limit: 1`), `test/health.e2e-spec.ts` (new — 200/`status: ok` on a healthy upstream ping, 503 on a failing one) — 85/85 e2e tests passing (up from 77). Confirmed beforehand that no existing e2e test issues more than one HTTP request per `it()` block, so introducing a global per-IP rate limit (fresh `ThrottlerStorage` per test, since `createTestApp()` recompiles the whole module per test) couldn't have broken any pre-existing test.
-  * Clean `npm run build` and `npm run lint` (0 errors; same pre-existing `supertest`/`App` `no-unsafe-argument` warnings as prior phases).
-  * Live-verified against the real `jsonplaceholder.typicode.com` (`npm run start`, `curl`'d, signaled, killed after): `/health` healthy response, `X-Cache: MISS`→`HIT` on repeated `GET /posts/1` with a fresh envelope each time, `429` after 20 requests to `/posts` within 60s with `/health` unaffected, and clean `SIGTERM` shutdown logging — see above for each.
+### Phase 7 — Harness CI/CD
 
-### [x] Phase 7: Documentation & polish
+Implemented out of phase-number order (Phase 3, Pagination, is still not
+started — same rationale as Phases 4-6: it was never a prerequisite), and
+scoped to **pipeline-as-code only**, at explicit request: the remaining
+work needs a real Harness account, a per-account Delegate token generated
+through the Harness UI, and connector credentials, none of which this
+environment can create non-interactively.
 
-* **Swagger CLI plugin enabled** (`nest-cli.json` → `compilerOptions.plugins: ["@nestjs/swagger"]`). This is what actually does most of the documentation work: DTO/entity `@ApiProperty()` metadata is inferred from TS types at build time (no manual property decoration anywhere), and — since `classValidatorShim` defaults to `true` — existing `class-validator` decorators enrich the generated schema for free (`@IsEmail()` → `format: email`, `@IsPositive()` → `minimum: 1`, etc., confirmed by inspecting the generated `/docs-json`). Even the private, non-exported `AddressDto`/`CompanyDto`/`GeoDto` classes nested inside `create-user.dto.ts` (Phase 5) got picked up correctly as named component schemas.
-* **`SwaggerModule`** wired in `main.ts` (`DocumentBuilder` + `SwaggerModule.createDocument`/`.setup('docs', ...)`), served at `/docs` (UI) and `/docs-json` (raw OpenAPI). Mounted via the underlying HTTP adapter directly rather than as a Nest controller route, so it deliberately bypasses the app's own `ThrottlerGuard`/interceptor stack — confirmed nothing in `/docs` gets rate-limited or enveloped.
-* **`ApiEnvelopedResponse` / `ApiEnvelopedEmptyResponse` / `envelopeSchema`** (`src/common/decorators/api-envelope-response.decorator.ts`) — PLAN.md's suggested `api-paginated-response.decorator.ts` doesn't fit literally: this API has no pagination (no `_page`/`_limit` was ever wired up), but every single success response *is* wrapped by `TransformInterceptor` into `{ data, meta }`. Left undocumented, the CLI-plugin-inferred response type would show the bare entity — actively wrong given the real response shape. `ApiEnvelopedResponse(Model, { isArray?, status?, description? })` composes `ApiExtraModels` + `ApiResponse` with a `{ data: <model or model[]>, meta }` schema; `ApiEnvelopedEmptyResponse` is the same for the six `DELETE` endpoints, which have no entity to wrap (JSONPlaceholder responds `200 {}`). `envelopeSchema(dataSchema)` is the shared building block, exported so `HealthController` — whose data shape is terminus's `HealthCheckResult`, not one of our own entity classes — can reuse it without needing `ApiExtraModels`/`getSchemaPath`.
-* **All six resource controllers decorated identically:** `@ApiTags('<resource>')` at class level, `@ApiEnvelopedResponse`/`@ApiEnvelopedEmptyResponse` on every method (list, single, create, update, patch, delete, and each nested route). `@ApiOperation` summaries were deliberately skipped — `@ApiTags` grouping plus the plugin's own inferred param/body/response typing was judged sufficient; adding a hand-written summary to all ~40 methods was low value for the effort versus what the CLI plugin already provides for free. Tag descriptions added via `DocumentBuilder.addTag(...)` in `main.ts` for a cleaner Swagger UI sidebar.
-* **`HealthController` swagger fix:** Terminus's own `@HealthCheck()` decorator auto-adds `@ApiOkResponse`/`@ApiServiceUnavailableResponse` when it detects `@nestjs/swagger` is installed — but it documents a *bare* `HealthCheckResult`, unaware that this route flows through the same global `TransformInterceptor` as everything else. Fixed by passing `@HealthCheck({ swaggerDocumentation: false })` and adding two explicit `@ApiResponse` (200/503) decorators wrapping `HealthCheckResult`'s shape in the same envelope via `envelopeSchema()`. Confirmed live: `/docs-json`'s `/health` schema now matches a real `curl /health` response exactly (`{data: {status, info, error, details}, meta: {...}}}`), where before the fix it showed the bare unwrapped shape.
-* **Contract test suite** (`test/contract/jsonplaceholder.contract-spec.ts`, opt-in via `npm run test:contract` / `RUN_CONTRACT_TESTS=1`): hits the real `jsonplaceholder.typicode.com` through the actual app (no nock) for `GET /posts`, `GET /posts/:id/comments` (a nested route), and `GET /users/:id` (deepest nesting: address→geo, company) — asserting the response shape against the real `Post`/`Comment`/`User` entity types, per PLAN.md's own framing ("keeps your nock fixtures honest"). Isolated via its own `test/jest-contract.json` (no `nock-setup.ts` in `setupFilesAfterEnv`, so real network calls aren't blocked) and naturally excluded from `npm test`/`npm run test:e2e` by filename alone (`.contract-spec.ts` matches neither's `testRegex`); the `RUN_CONTRACT_TESTS` env-gate (`describe.skip` otherwise) is a second, explicit layer so a bare `jest --config test/jest-contract.json` skips instead of silently hitting the real network. **Known lint gotcha re-encountered:** the shape assertions initially used `toMatchObject({ id: expect.any(Number), ... })`, which trips `no-unsafe-assignment` (the exact Phase 3 gotcha — `expect.any()` nested inside an object literal, vs. fine as a bare argument to `toEqual`). Rewrote as individual `expect(post.id).toEqual(expect.any(Number))`-style assertions per field, typed against the real entity classes (`Post`, `Comment`, `User`) rather than `Record<string, unknown>` — which also makes the test more literally "validate against your entities," not just structurally similar. Confirmed passing live against the real API (network access available in this environment).
-* **Coverage review** (`npm run test:cov`, unit-only — no combined unit+e2e coverage config exists in this project): `src/common/` (filters/interceptors/pipes/middleware/decorators) at 95–100% across the board. `src/upstream/upstream.service.ts` — explicitly PLAN.md's highest-priority file ("the core of this project") — was 92.85% stmts but `put`/`patch`/`delete` had **zero direct unit coverage**: only `get`/`post` were ever called in `upstream.service.spec.ts`, with the other three verbs exercised only transitively through e2e (`PostsService.update/patch/remove`, etc.). Fixed with three short call-contract tests mirroring the existing `post` test's style — now 100% stmts/funcs/lines on that file. Left everything else as-is per PLAN's own stated philosophy ("don't chase 100%"): `*.module.ts` files show 0% in this report because unit tests instantiate controllers/services directly rather than through the real `@Module` wiring (that path is only exercised by e2e, which this particular report doesn't merge in) — not an actual gap. Controller "75% branch" numbers are the same story: thin, fully-tested passthroughs whose only "untested branch" is decorator metadata, not logic.
-* **README:** added "API documentation" (points at `/docs`, explains the plugin + envelope-decorator approach) and a top-level "Architecture" section (layered request flow, the `AppModule`-centralizes-cross-cutting-concerns decision, the envelope contract) as a short entry point — `PROGRESS.md` remains the fuller phase-by-phase decision record, README now points to it rather than duplicating it.
-* **Testing & Verification:**
-  * Unit tests: 173/173 passing (up from 170 — the three new `UpstreamService` verb tests; no new unit-testable logic was added elsewhere, `ApiEnvelopedResponse`/`envelopeSchema` are declarative decorator composition, not runtime branching logic worth a dedicated spec).
-  * E2E: 85/85 passing, unchanged — Phase 7 added no new runtime behavior, only documentation metadata and a separate opt-in test suite.
-  * Contract: 3/3 passing against the real API (see above).
-  * Clean `npm run build` and `npm run lint` (0 errors; same pre-existing `supertest`/`App` `no-unsafe-argument` warnings as prior phases).
-  * Live-verified against the real `jsonplaceholder.typicode.com` (`npm run start`, `curl`'d, killed after): `/docs` serves the Swagger UI HTML; `/docs-json` produces a valid OpenAPI document with all 7 tags (6 resources + health), correct `{data, meta}`-enveloped schemas on every path including the corrected `/health`, and validation-derived constraints (`minimum: 1` on `userId`/`postId` query and body fields, `format: email` on comment/user emails) actually present in the generated schema — not just assumed from the plugin's documented behavior.
+- `.harness/pipelines/ci.yaml`: `npm ci` → lint/typecheck/unit in parallel
+  → e2e → `BuildAndPushDockerRegistry` → a `Run` step that promotes the
+  built tag into `k8s/overlays/local` (`kustomize edit set image` +
+  git commit/push). The last two steps are gated to `master` only.
+- `.harness/pipelines/cd.yaml`: `K8sRollingDeploy` against `local_k3d_infra`
+  → `ShellScript` smoke test (curls `/health/ready` and `/posts/1`) →
+  `HarnessApproval` → `K8sRollingDeploy` against `prod_infra` → smoke test.
+  Each `K8sRollingDeploy` has a matching `K8sRollingRollback` in
+  `rollbackSteps`.
+- `.harness/pipelines/contract-tests.yaml` + `.harness/triggers/contract-tests-cron.yaml`:
+  `npm run test:contract` on a daily cron rather than a PR gate, per
+  `PLAN.md`'s "optional" item — upstream flakiness never blocks a merge.
+- `.harness/services/json-placeholder-api.yaml`, `.harness/environments/{local-k3d,prod}.yaml`,
+  `.harness/infrastructures/{local-k3d,prod}-infra.yaml`: a Kubernetes
+  service definition with one Kustomize manifest source, and two
+  environments whose `overlay` variable selects `k8s/overlays/local` vs.
+  `k8s/overlays/prod` — the same base/overlay split Phase 6 already built.
+- **Chose git-commit promotion over Harness's native Kustomize
+  artifact-substitution path** (a "Kustomize Patches" manifest type layered
+  on top of the base manifest) for getting the CI-built image tag into the
+  deployed manifest. The native path is the more "Harness-idiomatic" answer
+  but is the piece of this setup furthest from anything verifiable without
+  a real tenant; git-commit promotion is a plain, testable-in-principle
+  GitOps pattern (CI writes the tag, CD applies whatever's committed) with
+  no coupling between the two pipelines beyond git. Documented as a
+  deliberate choice, not an oversight, in `.harness/README.md`.
+- **Correctness fix while drafting the smoke-test step**: it runs `onDelegate: true`,
+  and the Delegate is itself installed as a pod inside the k3d cluster (that's
+  the entire point of Harness's outbound-only model) — so it shares the
+  cluster's network namespace, not the WSL2 host's. A first draft curled
+  `http://localhost:8080` (Phase 6's host-mapped Traefik port); fixed to
+  curl the in-cluster Service directly
+  (`json-placeholder-api.default.svc.cluster.local`), which needs no
+  Ingress/host-header dance at all from inside the cluster.
+- **Deployment verification step is a plain smoke test, not Harness's
+  metrics-based Continuous Verification** — `PLAN.md` explicitly wants that
+  paired with Phase 8, and there's no real metrics backend yet for it to
+  gate on. The `ShellScript` step is the honest interim version: the same
+  two curls Phase 6 verified by hand, now automated and blocking rollout.
+- Every external identifier (connector refs, registry, user group, prod
+  host) is a `REPLACE_WITH_REAL_*` placeholder, matching the convention
+  `k8s/overlays/prod` already established in Phase 6. `.harness/README.md`
+  is the setup checklist: Harness account → install the Delegate into k3d
+  (the one genuinely interactive step — the token is generated per-account
+  in the UI) → four connectors → find-and-replace the placeholders → import
+  entities in dependency order (services → environments →
+  infrastructures → pipelines → triggers) → run CI by hand once before
+  trusting CD against the cluster.
+- Not verified end-to-end against a real Harness tenant (no account exists
+  in this project) — everything above was checked against the documented
+  Harness NextGen YAML schema and this repo's actual file paths/service
+  names/branch, not against a live pipeline run. `README.md` gained a short
+  "CI/CD (Harness)" subsection pointing at `.harness/README.md`.
 
-## Active Context & Architectural Decisions
+### Phase 8 — Observability
 
-* **Path Aliases Dropped:** Decided against `tsconfig` path aliases (`@common/*`, etc.) to prevent build pipeline fragility with Nest CLI's standard `tsc` compiler. Using clean relative imports instead.
-* **Environment Validation:** App fails startup explicitly if environment validation fails.
-* **Single timeout mechanism:** Timeout is enforced by axios itself (the `timeout` set on the axios instance in `UpstreamModule`), not by an additional rxjs `timeout()` operator. A timed-out request surfaces as an `AxiosError` with `code === 'ECONNABORTED'`, which `UpstreamService` maps to `UpstreamErrorType.TIMEOUT`. Rationale: one source of truth for the timeout duration instead of two independently-configured timeout mechanisms that could race or drift.
-* **`UpstreamException` stays HTTP-agnostic:** It's a plain domain error, not an `HttpException`. Translating `UpstreamErrorType` → HTTP status codes is `AllExceptionsFilter`'s job (Phase 3, now built), keeping `UpstreamService` free of any HTTP-response concerns.
-* **Retry semantics discovered during testing:** `@nestjs/axios`'s `HttpService.request()` wraps every call in `new Observable(subscriber => { axios(...).then(...) })`, so a fresh axios call happens on **every subscription**, not on every call to `.request()`. `retry()` exploits this correctly in production (each retry resubscribes → a genuinely new HTTP call). Unit tests mocking `HttpService` had to account for this: `upstream.service.spec.ts` uses a `respondWith()` helper that returns a custom Observable simulating per-subscription attempts, rather than chaining `mockReturnValueOnce()` on the mock function (which is only ever called once per outer request).
-* **Global providers live in `AppModule`, not `main.ts`:** all cross-cutting pipes/filters/interceptors/middleware are registered inside `AppModule` itself (`APP_PIPE`/`APP_FILTER`/`APP_INTERCEPTOR` tokens, `configure()` for middleware) rather than via `app.useGlobalXxx()` calls in `main.ts`. Since both `main.ts` and `test/support/create-test-app.ts` just bootstrap `AppModule`, this guarantees they behave identically by construction — there's no second place that can drift out of sync.
-* **Two timeout mechanisms, not a conflict:** the Phase 1 "single timeout mechanism" decision was about not double-configuring the *upstream call's own* timeout. The Phase 3 `TimeoutInterceptor` is a different, wider concern — a request-lifecycle backstop — sized (`timeoutMs * (maxRetries + 2)`) to always exceed `UpstreamService`'s own worst case, so it only fires for genuinely stuck requests, not upstream latency (which axios's own timeout continues to own).
-* **One exception filter, not two:** PLAN.md listed `upstream-exception.filter.ts` as an optional second filter. Folded `UpstreamException` handling into `AllExceptionsFilter` directly instead — avoids Nest's multi-filter ordering/matching semantics for no real benefit at this scale.
+Implemented out of phase-number order (Phase 3, Pagination, is still not
+started — same rationale as Phases 4-7: it was never a prerequisite), at
+explicit request.
 
-## Next Immediate Task
+- `src/instrumentation.ts`: `NodeSDK` with `getNodeAutoInstrumentations()`
+  (which already bundles `instrumentation-http` and `instrumentation-nestjs-core`
+  — registering them again separately, as `PLAN.md`'s original sketch
+  implied, would double-instrument), filesystem instrumentation disabled
+  (noisy, irrelevant to a proxy), and pino log-*sending* disabled via
+  `instrumentation-pino`'s config (log *correlation* — injecting
+  `trace_id`/`span_id` into pino output — stays on; PLAN.md's ask was
+  trace/metric export plus correlated logs, not a full OTLP logs pipeline).
+  `OTLPTraceExporter`/`OTLPMetricExporter` take no explicit `url`, relying
+  entirely on the standard `OTEL_EXPORTER_OTLP_ENDPOINT` env var (default
+  `http://localhost:4318`) — docker-compose.yml and k8s both override it to
+  point at their own collector.
+- **Loaded via `node --import ./dist/src/instrumentation.js`**, not an
+  import inside `main.ts` — `package.json`'s `start:prod` and the
+  Dockerfile's `CMD` both do this; `start`/`start:dev` (`nest start`) don't,
+  since wiring `--import` through `nest start`'s dev-mode compiler wasn't
+  worth the complexity for a phase whose deliverable is the deployed path.
+- **`correlationId` unified with the OTel trace id**
+  (`src/common/hooks/correlation-id.hook.ts`): when no client-supplied
+  `x-correlation-id` header exists, the generated id is now
+  `trace.getActiveSpan()?.spanContext().traceId ?? randomUUID()` rather than
+  always `randomUUID()`. `instrumentation-http` starts a span for the
+  incoming request before Fastify's own `onRequest` hooks run, so the span
+  is already active by the time this hook reads it. A client-supplied
+  header is still honoured as-is (existing contract, existing e2e
+  coverage) — the two can legitimately diverge in that one case.
+- **`nestjs-pino`** replaces Nest's console logger for structured JSON.
+  `AppModule` registers `LoggerModule.forRootAsync`; `main.ts` calls
+  `app.useLogger(app.get(Logger))` with `bufferLogs: true` on
+  `NestFactory.create` so Nest's own bootstrap-time log lines get
+  pino-formatted too instead of leaking out through the console logger
+  first. Not wired into `test/support/create-test-app.ts` — e2e tests don't
+  need JSON log output, and `AppModule`'s own factory sets pino's level to
+  `silent` when `NODE_ENV=test` regardless.
+  - **Real bug, found only by deploying to the actual k3d cluster**:
+    `pino-pretty` is a devDependency, stripped from the production image by
+    `npm prune --omit=dev` (Dockerfile). An early version chose the
+    pretty-vs-JSON transport based on `NODE_ENV !== 'production'` — which
+    crash-loops the pod, because `overlays/local`'s ConfigMap sets
+    `NODE_ENV=development` on that same pruned production image (just to
+    get the `debug` log level), and pino's transport loader throws
+    *synchronously* if the target module can't be resolved. No test caught
+    this — every test runs from source with all devDependencies installed.
+    Fixed by gating on whether `pino-pretty` actually resolves
+    (`require.resolve` in a try/catch, `isPinoPrettyAvailable()` in
+    `app.module.ts`) instead of on `NODE_ENV`.
+- **Custom metrics** via a small `MetricsService`
+  (`src/common/metrics/metrics.service.ts`, global `MetricsModule`), all
+  OTel `Counter`s: `http_cache_lookups_total{result="hit|miss"}`
+  (`HttpCacheInterceptor`, read off the `X-Cache` header the base
+  `CacheInterceptor` already sets rather than a second `cacheManager.get()`
+  just to observe hit/miss), `upstream_retries_total` (`UpstreamService`'s
+  `retryDelay()`), `throttle_rejections_total` (`AllExceptionsFilter`,
+  keyed on `exception instanceof ThrottlerException`).
+- `docker-compose.yml`: an `otel` service (`grafana/otel-lgtm`, pinned to
+  `0.32.1` — the actual latest tag at time of writing, not the `latest`
+  the repo's other pinned versions avoid), Grafana remapped to host `3001`
+  since the app already owns `3000`; the app service gets
+  `OTEL_EXPORTER_OTLP_ENDPOINT=http://otel:4318` and `depends_on: [otel]`.
+- `k8s/overlays/local/otel.yaml`: the same `otel-lgtm` image deployed into
+  the Phase 6 k3d cluster (Deployment + Service, sized generously —
+  512Mi/1500Mi — since Grafana+Tempo+Prometheus+Loki in one container needs
+  more headroom than the app itself). Deliberately `overlays/local`-only,
+  not `k8s/base` — there's no equivalent backend for `overlays/prod` yet.
+  `k8s/base/configmap.yaml` gained `OTEL_EXPORTER_OTLP_ENDPOINT`/`OTEL_SERVICE_NAME`
+  keys (default `http://localhost:4318`, deliberately "wrong" for a real
+  cluster but non-fatal — the app degrades to failed OTLP exports rather
+  than refusing to start); `overlays/local` patches the endpoint to
+  `http://otel-lgtm:4318`.
+- Verified for real, twice: `docker compose up --build` (traces confirmed
+  in Tempo, custom + auto-instrumentation metrics confirmed in Prometheus,
+  JSON logs confirmed carrying matching `trace_id`/`correlationId`, all via
+  `docker compose exec otel curl localhost:3200/api/search` and
+  `localhost:9090/api/v1/query` — Grafana's own UI at `:3001` also
+  confirmed healthy), then again against the real k3d cluster after
+  pushing the built image to its registry and applying the updated
+  `overlays/local` (same three checks, via `kubectl exec` into the
+  `otel-lgtm` pod, plus a curl through Traefik showing a trace-id
+  `correlationId`). One sandbox artifact, not a code defect: a leftover
+  `node dist/src/main` process from an earlier session already held host
+  port 3000, ahead of Docker's own forwarded port for it — same class of
+  issue Phase 5's PROGRESS.md already flagged; worked around the same way
+  (verify via `docker compose exec`, not the host's `localhost:3000`).
+- `npm run build`, `npm run lint` (0 errors, 96 pre-existing warnings —
+  unchanged), `npm run typecheck` (clean), `npm run test:all` (271 passed,
+  3 contract skipped without the env flag; also verified green with
+  `RUN_CONTRACT_TESTS=1`).
+- **Not done** (see `PLAN.md`'s Work list for the "why", matching Phase 7's
+  precedent): the Dynatrace trial (needs a real account signup) and
+  feeding these metrics into Harness's Continuous Verification (needs the
+  real Harness tenant Phase 7 is already waiting on). Both are one-account
+  away, not one-PR away — the vendor-neutral OTLP instrumentation means
+  neither requires any rework once that account exists.
 
-None — PLAN.md's roadmap (Phases 0–7) is complete: full CRUD across six resources with nested routes, cross-cutting concerns (validation, error envelope, logging/transform/cache/timeout interceptors, correlation IDs), production hardening (caching, rate limiting, health checks, graceful shutdown), and documentation (Swagger at `/docs`, opt-in contract tests, architecture notes) are all in place and live-verified against the real upstream.
+## Current Phase
 
-Natural next steps if the project continues, none currently planned/requested:
+### Phase 3 — Pagination
 
-* Pagination (`?_page=`/`?_limit=`) — PLAN.md's folder structure sketched a `pagination-query.dto.ts` that was never built; JSONPlaceholder itself supports `_page`/`_limit`/`_sort` query params on list endpoints, so this would be a real feature, not a contrived one.
-* A CI workflow (GitHub Actions or similar) running `build`/`lint`/`test`/`test:e2e` on push — none exists yet; everything so far has been verified locally per phase.
-* Structured request logging / metrics export (the current `LoggingInterceptor` logs via Nest's built-in `Logger` only) if this ever needed to run somewhere observability tooling could consume it.
+Not started. See `PLAN.md` for the upstream pagination semantics, the
+`getWithMeta()` refactor, and the four call sites (DTOs, interceptor,
+nested routes, Swagger) it touches. The only phase left in `PLAN.md` that
+doesn't need a real external account to finish — every other open item
+(Phase 7's Harness connectors/Delegate, Phase 8's Dynatrace trial and
+Harness Continuous Verification) is blocked on one that doesn't exist in
+this environment.
+
+## Active Context Architecture
+
+- Vitest globals are deliberately **off** — every spec imports its own
+  `describe`/`it`/`vi`/etc.; see `test/README.md` for the pattern per kind.
+- e2e/contract specs call `api(app)` (`test/support/api.ts`) instead of
+  `request(app.getHttpServer())`. Nest types `getHttpServer()` as `any`, so
+  the raw form raised a `no-unsafe-argument` warning at all 96 call sites;
+  the helper holds one `as Server` assertion instead.
+- `unplugin-swc` reads decorator settings from `tsconfig.json` automatically
+  — don't duplicate that config in `vitest.config.mts`.
+- `tsconfig.json` has no `baseUrl` and no path aliases — all internal
+  imports are relative. `emitDecoratorMetadata`/SWC (Phase 1) is what makes
+  DI work, not `tsc`'s module resolution.
+- `exactOptionalPropertyTypes` is on: never assign `undefined` explicitly to
+  an optional property key. Build the object with a conditional spread
+  instead so the key is omitted. See `UpstreamService.toAxiosOptions()` for
+  the pattern.
+- `tsgo --noEmit` (via `npm run typecheck`) is the fast type-check gate;
+  `nest build` (still `tsc` under the hood) remains the emit path until
+  TypeScript 7.1 ships a stable programmatic API for `typescript-eslint`
+  and friends to build against.

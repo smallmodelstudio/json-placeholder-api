@@ -16,7 +16,7 @@ export class AlbumsService {
 
   findAll(query: QueryAlbumsDto): Promise<Album[]> {
     return this.upstream.get<Album[]>('/albums', {
-      params: query.userId !== undefined ? { userId: query.userId } : undefined,
+      ...(query.userId !== undefined && { params: { userId: query.userId } }),
     });
   }
 

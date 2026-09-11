@@ -1,16 +1,25 @@
+import {
+  describe,
+  it,
+  beforeEach,
+  afterEach,
+  expect,
+  vi,
+  MockInstance,
+} from 'vitest';
 import { CallHandler, ExecutionContext, Logger } from '@nestjs/common';
 import { firstValueFrom, of, throwError } from 'rxjs';
 import { LoggingInterceptor } from './logging.interceptor';
 
 describe('LoggingInterceptor', () => {
   let interceptor: LoggingInterceptor;
-  let logSpy: jest.SpyInstance;
-  let warnSpy: jest.SpyInstance;
+  let logSpy: MockInstance;
+  let warnSpy: MockInstance;
 
   beforeEach(() => {
     interceptor = new LoggingInterceptor();
-    logSpy = jest.spyOn(Logger.prototype, 'log').mockImplementation();
-    warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation();
+    logSpy = vi.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
+    warnSpy = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -23,7 +32,7 @@ describe('LoggingInterceptor', () => {
       switchToHttp: () => ({
         getRequest: () => ({
           method: 'GET',
-          originalUrl: '/posts',
+          url: '/posts',
           correlationId: 'corr-1',
         }),
       }),

@@ -31,23 +31,38 @@ export class HealthController {
     private readonly configService: ConfigService<AppConfig, true>,
   ) {}
 
-  @Get()
   // Terminus's own @HealthCheck() would otherwise auto-document a bare
-  // HealthCheckResult, but this route flows through the same global
+  // HealthCheckResult, but these routes flow through the same global
   // TransformInterceptor as everything else — its swagger docs are
-  // disabled here in favor of two explicit, envelope-aware responses.
+  // disabled here in favor of explicit, envelope-aware responses.
+
+  @Get('live')
   @HealthCheck({ swaggerDocumentation: false })
   @ApiResponse({
     status: 200,
-    description: 'The health check succeeded.',
+    description: 'The process is up.',
+    schema: envelopeSchema(healthResultSchema),
+  })
+  // No indicators: liveness must never fail because of upstream trouble, or
+  // Kubernetes would restart every pod in a loop for a fault none of them
+  // can fix (see PLAN.md Phase 5).
+  live(): Promise<HealthCheckResult> {
+    return this.health.check([]);
+  }
+
+  @Get('ready')
+  @HealthCheck({ swaggerDocumentation: false })
+  @ApiResponse({
+    status: 200,
+    description: 'The upstream is reachable.',
     schema: envelopeSchema(healthResultSchema),
   })
   @ApiResponse({
     status: 503,
-    description: 'The health check failed.',
+    description: 'The upstream is unreachable.',
     schema: envelopeSchema(healthResultSchema),
   })
-  check(): Promise<HealthCheckResult> {
+  ready(): Promise<HealthCheckResult> {
     const baseUrl = this.configService.get('http.baseUrl', { infer: true });
     // /posts/1 is a small, always-present resource — a reasonable stand-in
     // for a dedicated health/ping endpoint, which JSONPlaceholder lacks.

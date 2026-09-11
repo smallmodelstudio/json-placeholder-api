@@ -1,3 +1,4 @@
+import { describe, it, beforeEach, expect, vi, Mock } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
 import { UpstreamService } from '../../upstream/upstream.service';
 import { PhotosService } from './photos.service';
@@ -6,20 +7,20 @@ import { Photo } from './entities/photo.entity';
 describe('PhotosService', () => {
   let service: PhotosService;
   let upstream: {
-    get: jest.Mock;
-    post: jest.Mock;
-    put: jest.Mock;
-    patch: jest.Mock;
-    delete: jest.Mock;
+    get: Mock;
+    post: Mock;
+    put: Mock;
+    patch: Mock;
+    delete: Mock;
   };
 
   beforeEach(async () => {
     upstream = {
-      get: jest.fn(),
-      post: jest.fn(),
-      put: jest.fn(),
-      patch: jest.fn(),
-      delete: jest.fn(),
+      get: vi.fn(),
+      post: vi.fn(),
+      put: vi.fn(),
+      patch: vi.fn(),
+      delete: vi.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({

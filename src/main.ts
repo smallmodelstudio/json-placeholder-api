@@ -1,13 +1,32 @@
 import { NestFactory } from '@nestjs/core';
+import {
+  FastifyAdapter,
+  NestFastifyApplication,
+} from '@nestjs/platform-fastify';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { AppConfig } from './config/config.types';
+import { registerCorrelationIdHook } from './common/hooks/correlation-id.hook';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestFastifyApplication>(
+    AppModule,
+    new FastifyAdapter(),
+    { bufferLogs: true },
+  );
   const configService: ConfigService<AppConfig, true> = app.get(ConfigService);
 
+  // Swaps Nest's default console Logger for pino app-wide — every
+  // `new Logger(...)` call throughout the app (UpstreamService,
+  // AllExceptionsFilter, etc.) routes through this from here on, not just
+  // calls made via DI injection. `bufferLogs: true` above holds Nest's own
+  // bootstrap-time log lines until this runs, so they get pino-formatted
+  // too instead of leaking out through the console logger first.
+  app.useLogger(app.get(Logger));
+
+  registerCorrelationIdHook(app.getHttpAdapter().getInstance());
   app.enableShutdownHooks();
 
   const swaggerConfig = new DocumentBuilder()
@@ -25,11 +44,16 @@ async function bootstrap() {
     .addTag('todos', 'Todo items')
     .addTag('albums', 'Photo albums, plus nested /albums/:id/photos')
     .addTag('photos', 'Photos within an album')
-    .addTag('health', 'Liveness/readiness — pings the upstream')
+    .addTag('health', 'Liveness (/health/live) and readiness (/health/ready)')
     .build();
   const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
   SwaggerModule.setup('docs', app, swaggerDocument);
 
-  await app.listen(configService.get('port', { infer: true }));
+  // Bind 0.0.0.0 (not just localhost) so the app is reachable from outside
+  // its container once it's deployed in one (Phase 5).
+  await app.listen({
+    port: configService.get('port', { infer: true }),
+    host: '0.0.0.0',
+  });
 }
 void bootstrap();

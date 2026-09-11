@@ -1,7 +1,9 @@
+import { describe, it, expect, vi } from 'vitest';
 import { CallHandler, ExecutionContext } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { firstValueFrom, of } from 'rxjs';
 import { delay } from 'rxjs/operators';
+import { AppConfig } from '../../config/config.types';
 import { TimeoutInterceptor } from './timeout.interceptor';
 
 describe('TimeoutInterceptor', () => {
@@ -10,8 +12,8 @@ describe('TimeoutInterceptor', () => {
     maxRetries: number,
   ): TimeoutInterceptor => {
     const configService = {
-      get: jest.fn().mockReturnValue({ timeoutMs, maxRetries }),
-    } as unknown as ConfigService;
+      get: vi.fn().mockReturnValue({ timeoutMs, maxRetries }),
+    } as unknown as ConfigService<AppConfig, true>;
     return new TimeoutInterceptor(configService);
   };
 

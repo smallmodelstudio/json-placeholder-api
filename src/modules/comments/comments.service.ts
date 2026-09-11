@@ -11,7 +11,7 @@ export class CommentsService {
 
   findAll(query: QueryCommentsDto): Promise<Comment[]> {
     return this.upstream.get<Comment[]>('/comments', {
-      params: query.postId !== undefined ? { postId: query.postId } : undefined,
+      ...(query.postId !== undefined && { params: { postId: query.postId } }),
     });
   }
 

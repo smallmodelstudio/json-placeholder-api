@@ -1,3 +1,4 @@
+import { afterEach, beforeAll, afterAll } from 'vitest';
 import nock from 'nock';
 
 beforeAll(() => {

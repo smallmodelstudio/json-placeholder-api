@@ -11,8 +11,9 @@ export class PhotosService {
 
   findAll(query: QueryPhotosDto): Promise<Photo[]> {
     return this.upstream.get<Photo[]>('/photos', {
-      params:
-        query.albumId !== undefined ? { albumId: query.albumId } : undefined,
+      ...(query.albumId !== undefined && {
+        params: { albumId: query.albumId },
+      }),
     });
   }
 

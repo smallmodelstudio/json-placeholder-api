@@ -1,0 +1,25 @@
+service:
+  name: json-placeholder-api
+  identifier: json_placeholder_api
+  serviceDefinition:
+    type: Kubernetes
+    spec:
+      manifests:
+        - manifest:
+            identifier: k8s_manifests
+            type: Kustomize
+            spec:
+              store:
+                type: Github
+                spec:
+                  connectorRef: account.REPLACE_WITH_REAL_GITHUB_CONNECTOR
+                  gitFetchType: Branch
+                  branch: master
+                  # One overlay path per environment (Phase 6's base +
+                  # overlays/{local,prod}); the environment supplies which
+                  # folder via its own `overlay` variable, kept as a single
+                  # source of truth rather than duplicating this manifest
+                  # block per environment.
+                  folderPath: k8s/overlays/<+env.variables.overlay>
+              pluginPath: kustomize
+  gitOpsEnabled: false

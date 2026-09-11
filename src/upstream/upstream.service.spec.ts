@@ -1,3 +1,4 @@
+import { describe, it, beforeEach, expect, vi, Mock } from 'vitest';
 import { Test, TestingModule } from '@nestjs/testing';
 import { HttpService } from '@nestjs/axios';
 import { ConfigService } from '@nestjs/config';
@@ -8,6 +9,7 @@ import {
   UpstreamErrorType,
   UpstreamException,
 } from '../common/exceptions/upstream.exception';
+import { MetricsService } from '../common/metrics/metrics.service';
 
 /**
  * @nestjs/axios's HttpService.request() wraps each call in `new Observable(...)`,
@@ -19,11 +21,14 @@ import {
  */
 function respondWith<T>(...emissions: Observable<T>[]) {
   let attempt = 0;
-  const attempts = jest.fn();
+  const attempts = vi.fn();
   const source = new Observable<T>((subscriber) => {
     attempts();
     const emission = emissions[Math.min(attempt, emissions.length - 1)];
     attempt += 1;
+    if (!emission) {
+      throw new Error('respondWith requires at least one emission');
+    }
     return emission.subscribe(subscriber);
   });
   return { source, attempts };
@@ -31,7 +36,8 @@ function respondWith<T>(...emissions: Observable<T>[]) {
 
 describe('UpstreamService', () => {
   let service: UpstreamService;
-  let httpService: { request: jest.Mock };
+  let metrics: MetricsService;
+  let httpService: { request: Mock };
 
   const makeAxiosResponse = <T>(data: T): AxiosResponse<T> =>
     ({
@@ -50,7 +56,7 @@ describe('UpstreamService', () => {
   };
 
   beforeEach(async () => {
-    httpService = { request: jest.fn() };
+    httpService = { request: vi.fn() };
 
     const configValues: Record<string, unknown> = {
       'http.baseUrl': 'https://jsonplaceholder.typicode.com',
@@ -61,15 +67,17 @@ describe('UpstreamService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         UpstreamService,
+        MetricsService,
         { provide: HttpService, useValue: httpService },
         {
           provide: ConfigService,
-          useValue: { get: jest.fn((key: string) => configValues[key]) },
+          useValue: { get: vi.fn((key: string) => configValues[key]) },
         },
       ],
     }).compile();
 
     service = module.get(UpstreamService);
+    metrics = module.get(MetricsService);
   });
 
   it('returns response data on success', async () => {
@@ -146,10 +154,13 @@ describe('UpstreamService', () => {
     );
     httpService.request.mockReturnValueOnce(source);
 
+    const recordRetrySpy = vi.spyOn(metrics, 'recordUpstreamRetry');
+
     const result = await service.get<{ id: number }>('/posts/1');
 
     expect(result).toEqual({ id: 1 });
     expect(attempts).toHaveBeenCalledTimes(2);
+    expect(recordRetrySpy).toHaveBeenCalledTimes(1);
   });
 
   it('does not retry a 4xx response', async () => {

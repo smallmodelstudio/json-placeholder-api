@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: json-placeholder-api-config
+data:
+  # Mirrors .env.example; overlays patch individual keys rather than
+  # redeclaring the whole map.
+  NODE_ENV: production
+  PORT: '3000'
+  UPSTREAM_BASE_URL: https://jsonplaceholder.typicode.com
+  UPSTREAM_TIMEOUT_MS: '5000'
+  UPSTREAM_MAX_RETRIES: '2'
+  CACHE_TTL_MS: '30000'
+  THROTTLE_TTL_MS: '60000'
+  THROTTLE_LIMIT: '20'
+  # Same http://localhost:4318 default as .env.example — wrong for every
+  # real cluster (there's no collector at localhost inside a pod), but
+  # instrumentation.ts degrades to failed OTLP exports rather than crashing,
+  # so it's a safe default rather than a placeholder that must be replaced
+  # before the app will even start. overlays/local points this at the
+  # in-cluster otel-lgtm Service (k8s/overlays/local/otel.yaml); prod has no
+  # observability backend yet (PLAN.md Phase 8's Dynatrace trial and
+  # in-cluster collector are both still open).
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:4318
+  OTEL_SERVICE_NAME: json-placeholder-api

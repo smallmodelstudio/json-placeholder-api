@@ -1,3 +1,4 @@
+import { describe, it, beforeEach, expect, vi, Mock } from 'vitest';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { HealthCheckService, HttpHealthIndicator } from '@nestjs/terminus';
@@ -5,15 +6,15 @@ import { HealthController } from './health.controller';
 
 describe('HealthController', () => {
   let controller: HealthController;
-  let health: { check: jest.Mock };
-  let http: { pingCheck: jest.Mock };
-  let configService: { get: jest.Mock };
+  let health: { check: Mock };
+  let http: { pingCheck: Mock };
+  let configService: { get: Mock };
 
   beforeEach(async () => {
-    health = { check: jest.fn() };
-    http = { pingCheck: jest.fn() };
+    health = { check: vi.fn() };
+    http = { pingCheck: vi.fn() };
     configService = {
-      get: jest.fn().mockReturnValue('https://jsonplaceholder.typicode.com'),
+      get: vi.fn().mockReturnValue('https://jsonplaceholder.typicode.com'),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -28,7 +29,25 @@ describe('HealthController', () => {
     controller = module.get(HealthController);
   });
 
-  describe('check', () => {
+  describe('live', () => {
+    it('checks no indicators, so it never depends on the upstream', async () => {
+      const result = {
+        status: 'ok' as const,
+        info: {},
+        error: {},
+        details: {},
+      };
+      health.check.mockResolvedValueOnce(result);
+
+      const response = await controller.live();
+
+      expect(response).toBe(result);
+      expect(health.check).toHaveBeenCalledWith([]);
+      expect(http.pingCheck).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('ready', () => {
     it('pings a lightweight upstream endpoint via HealthCheckService', async () => {
       const result = {
         status: 'ok' as const,
@@ -44,7 +63,7 @@ describe('HealthController', () => {
       );
       http.pingCheck.mockResolvedValueOnce({ upstream: { status: 'up' } });
 
-      const response = await controller.check();
+      const response = await controller.ready();
 
       expect(response).toBe(result);
       expect(http.pingCheck).toHaveBeenCalledWith(
