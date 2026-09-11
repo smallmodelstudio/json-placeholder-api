@@ -3,7 +3,14 @@ kind: PodDisruptionBudget
 metadata:
   name: json-placeholder-api
 spec:
-  minAvailable: 1
+  # maxUnavailable rather than minAvailable: with a single-replica overlay
+  # (k8s/overlays/local), minAvailable: 1 would equal the total replica
+  # count, so disruptionsAllowed is permanently 0 and a voluntary
+  # disruption — e.g. `kubectl drain` during a node upgrade — blocks
+  # forever. maxUnavailable: 1 gives the same "at most one pod down"
+  # guarantee for the multi-replica overlays while still allowing that one
+  # pod to be evicted when it's the only one.
+  maxUnavailable: 1
   selector:
     matchLabels:
       app: json-placeholder-api

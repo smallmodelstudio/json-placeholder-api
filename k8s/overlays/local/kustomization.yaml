@@ -13,10 +13,6 @@ images:
     newName: k3d-jsonplaceholder-registry:5000/json-placeholder-api
     newTag: local
 
-replicas:
-  - name: json-placeholder-api
-    count: 1
-
 patches:
   # No LOG_LEVEL knob exists in src/config — NODE_ENV=development is the
   # only "debug logging" lever the app actually has (Nest's default logger

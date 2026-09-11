@@ -4,6 +4,8 @@
 // already required by the time main.ts's own imports run, and OTel's
 // auto-instrumentation works by patching a module the first time it's
 // require()'d, so a late import means the patches simply never apply.
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { NodeSDK } from '@opentelemetry/sdk-node';
 import { getNodeAutoInstrumentations } from '@opentelemetry/auto-instrumentations-node';
 import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-http';
@@ -16,6 +18,17 @@ import {
 } from '@opentelemetry/semantic-conventions';
 import { registerShutdownHandler } from './common/utils/register-shutdown-handler';
 
+// `npm_package_version` is only set when a process is spawned by `npm run
+// *` — it's absent from `node --import ./dist/src/instrumentation.js
+// dist/src/main.js` (Dockerfile's CMD, and every k8s deploy), silently
+// falling back to a hardcoded "0.0.0" there. Reading package.json
+// ourselves works the same way in both contexts, and — resolved relative
+// to this file rather than `process.cwd()` — regardless of where the
+// process is started from.
+const { version } = JSON.parse(
+  readFileSync(join(__dirname, '../../package.json'), 'utf8'),
+) as { version: string };
+
 // No explicit `url` on either exporter: both fall back to the standard
 // OTEL_EXPORTER_OTLP_ENDPOINT (or the more specific *_TRACES_/*_METRICS_
 // variant) env var, defaulting to http://localhost:4318 when unset — set by
@@ -24,7 +37,7 @@ const sdk = new NodeSDK({
   resource: resourceFromAttributes({
     [ATTR_SERVICE_NAME]:
       process.env['OTEL_SERVICE_NAME'] ?? 'json-placeholder-api',
-    [ATTR_SERVICE_VERSION]: process.env['npm_package_version'] ?? '0.0.0',
+    [ATTR_SERVICE_VERSION]: version,
   }),
   traceExporter: new OTLPTraceExporter(),
   metricReader: new PeriodicExportingMetricReader({

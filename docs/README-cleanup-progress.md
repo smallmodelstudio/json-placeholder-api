@@ -127,6 +127,76 @@ resource route.
 **Docs touched:** `README-architecture.md` (request lifecycle,
 correlation-id gotcha, cross-cutting-concerns API-docs row).
 
-## Groups 4–6 — not started
+## Group 4 — CI/CD and k8s — done (branch `cleanup/ci-cd-k8s`)
+
+1. **Auto-fixing lint in CI.** `npm run lint` runs ESLint with `--fix`, so a
+   formatting problem gets silently rewritten and the job still exits 0.
+   Added `lint:check` (same rules, no `--fix`) and pointed `ci.yaml`'s Lint
+   step at it; `lint` stays as the local, auto-fixing command.
+2. **Image-tag flow.** Two separate bugs, one fix. `ci.yaml`'s promote step
+   used to touch only `k8s/overlays/local`, and pointed it at
+   `k3d-jsonplaceholder-registry:5000` — a hostname that only resolves
+   inside a local k3d cluster's own docker network, not from wherever this
+   pipeline actually runs, and not what `Build and push image` had just
+   pushed to (`REPLACE_WITH_REAL_REGISTRY`). The local overlay's manifest
+   was therefore never pullable by anything Harness itself deployed.
+   Separately, `k8s/overlays/prod`'s image was never touched by CI at all,
+   so `cd.yaml`'s prod stage — even after approval — would apply whatever
+   `REPLACE_WITH_REAL_TAG` happened to be committed, not the build that was
+   actually tested. Renamed the step to "Promote image tag to overlays"; it
+   now loops over both overlays, setting each to
+   `REPLACE_WITH_REAL_REGISTRY/json-placeholder-api:<shortCommitSha>` — the
+   exact image `Build and push image` just pushed — in one commit. The
+   manual-approval gate in `cd.yaml` is now the only thing between a change
+   and prod, not a stale manifest.
+3. **HPA vs. Deployment replica-count conflict.** `deployment.yaml` set
+   `spec.replicas: 2`, and both overlays additionally set it via Kustomize's
+   `replicas:` generator (local: 1, prod: 3) — any of these gets re-applied
+   on every deploy, resetting the HPA's scaling back to that static number.
+   Removed `replicas:` from the base Deployment and both overlays entirely;
+   omitting it lets Kubernetes default to 1 replica on first create only,
+   with the HPA (already patched per overlay) reconciling up to its
+   `minReplicas` from there without a later deploy ever fighting it.
+4. **`securityContext` and `preStop`.** Added a hardened pod/container
+   `securityContext` (non-root, no privilege escalation, read-only root
+   filesystem, all capabilities dropped — confirmed nothing in `src/` writes
+   to disk) and a `preStop` hook (`sleep 5`) so a pod clears the Service's
+   endpoints before SIGTERM actually stops traffic from arriving, both to
+   `deployment.yaml`.
+5. **PDB blocks single-replica drains.** `pdb.yaml` used `minAvailable: 1`,
+   which for the 1-replica local overlay equals the total replica count —
+   `disruptionsAllowed` is permanently 0, so a voluntary disruption (e.g.
+   `kubectl drain`) blocks forever. Switched to `maxUnavailable: 1`, which
+   gives the same "at most one pod down" guarantee for the multi-replica
+   overlays while still permitting that one pod to be evicted when it's the
+   only one.
+6. **`OTEL_SERVICE_NAME`'s version defaults to `0.0.0`.** `npm_package_version`
+   is only set by `npm run *`; it's absent from the Dockerfile/k8s
+   invocation (`node --import ./dist/src/instrumentation.js dist/src/main.js`).
+   `instrumentation.ts` now reads `package.json`'s `version` directly via
+   `readFileSync(join(__dirname, '../../package.json'))`, resolved relative
+   to the module's own compiled location rather than `process.cwd()` — works
+   identically under `npm run`, the compiled Docker image, and k8s.
+   Verified against the compiled build with an empty environment (`env -i`)
+   and from an unrelated working directory: resolves to the real
+   `package.json` version (`0.0.1`) in both cases, not the `0.0.0` fallback.
+
+**Verification:** lint (0 issues), lint:check (0 issues), typecheck, build,
+`prettier --check`, and `vitest run` all clean — 324 tests passed, 3
+contract tests skipped as designed. `kustomize build` on both overlays
+confirmed they still render (no `replicas:` field, correct
+`securityContext`/`preStop`/PDB, HPA and image refs unaffected). The
+Harness YAML itself is unverified against a real account, same as every
+other pipeline file (see `README-harness.md`), so its two changes were
+checked by rendering `kustomize edit set image` against a scratch copy of
+both overlays and reading the resulting diff, not by running the pipeline.
+
+**Docs touched:** `README-code-quality.md` (`lint`/`lint:check` split),
+`README-harness.md` (image-promotion flow, now covers both overlays),
+`README-docker-k8s.md` (Deployment/PDB table rows, prod overlay's
+placeholder status, a new gotcha on the local overlay's image drifting
+between the manual loop and Harness-promoted values).
+
+## Groups 5–6 — not started
 
 See the plan for scope.

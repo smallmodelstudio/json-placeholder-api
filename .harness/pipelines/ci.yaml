@@ -45,7 +45,10 @@ pipeline:
                       identifier: lint
                       spec:
                         shell: Sh
-                        command: npm run lint
+                        # lint:check (no --fix) so a formatting problem fails
+                        # the build instead of being silently rewritten and
+                        # passing anyway.
+                        command: npm run lint:check
                   - step:
                       type: Run
                       name: Typecheck
@@ -90,26 +93,39 @@ pipeline:
 
               - step:
                   type: Run
-                  name: Promote image tag to local overlay
-                  identifier: promote_local_overlay
+                  name: Promote image tag to overlays
+                  identifier: promote_overlays
                   spec:
                     shell: Sh
                     # GitOps-style promotion: CI writes the tag it just built
-                    # into the overlay that CD reads, rather than Harness
+                    # into the overlays that CD reads, rather than Harness
                     # substituting an artifact into the Kustomize manifest at
                     # deploy time. Chosen over Harness's manifest/artifact
                     # coupling for Kustomize because that path is unverified
                     # against a real tenant (see docs/README-harness.md) — this
                     # way CD only ever applies exactly what's committed.
+                    #
+                    # Both overlays get the exact tag "Build and push image"
+                    # just pushed to REPLACE_WITH_REAL_REGISTRY — previously
+                    # this only touched the local overlay, and pointed it at
+                    # k3d-jsonplaceholder-registry:5000, a registry nothing
+                    # was ever pushed to (that hostname only resolves inside a
+                    # local k3d cluster's own network, not from this runner).
+                    # The prod overlay was never touched at all, so
+                    # "Deploy to prod" would apply whatever k8s/overlays/prod
+                    # had committed — REPLACE_WITH_REAL_TAG, forever. Now the
+                    # same commit promotes both, so the manual-approval gate
+                    # in cd.yaml is the only thing standing between a change
+                    # and prod, not a stale manifest.
                     command: |
                       set -euo pipefail
-                      cd k8s/overlays/local
-                      npx kustomize edit set image \
-                        json-placeholder-api=k3d-jsonplaceholder-registry:5000/json-placeholder-api:<+codebase.shortCommitSha>
-                      cd -
+                      for overlay in local prod; do
+                        (cd "k8s/overlays/${overlay}" && npx kustomize edit set image \
+                          json-placeholder-api=REPLACE_WITH_REAL_REGISTRY/json-placeholder-api:<+codebase.shortCommitSha>)
+                      done
                       git config user.name "harness-ci"
                       git config user.email "ci@REPLACE_WITH_REAL_DOMAIN"
-                      git add k8s/overlays/local/kustomization.yaml
+                      git add k8s/overlays/local/kustomization.yaml k8s/overlays/prod/kustomization.yaml
                       git commit -m "chore(deploy): promote json-placeholder-api to <+codebase.shortCommitSha>"
                       git push origin HEAD:<+codebase.branch>
                   when:

@@ -12,10 +12,6 @@ images:
     newName: REPLACE_WITH_REAL_REGISTRY/json-placeholder-api
     newTag: REPLACE_WITH_REAL_TAG
 
-replicas:
-  - name: json-placeholder-api
-    count: 3
-
 patches:
   - target:
       kind: Ingress

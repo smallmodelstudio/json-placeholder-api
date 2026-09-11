@@ -5,7 +5,13 @@ metadata:
   labels:
     app: json-placeholder-api
 spec:
-  replicas: 2
+  # No `replicas:` here — the HPA (hpa.yaml) owns this field. A static value
+  # would fight it: every rolling deploy re-applies this manifest, and
+  # `kubectl apply` resets any field the manifest declares back to that
+  # value, undoing whatever the HPA had scaled to since the last deploy.
+  # Omitting it means k8s defaults to 1 replica on first create only; the
+  # HPA reconciles up to its minReplicas shortly after (see hpa.yaml and the
+  # overlays' minReplicas patches).
   selector:
     matchLabels:
       app: json-placeholder-api
@@ -15,8 +21,13 @@ spec:
         app: json-placeholder-api
     spec:
       # Gives in-flight requests + app.enableShutdownHooks() (app.module.ts)
-      # time to drain before the container is SIGKILLed.
+      # time to drain before the container is SIGKILLed. Must cover the
+      # preStop sleep below plus the app's own drain time.
       terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: app
           image: json-placeholder-api
@@ -26,6 +37,20 @@ spec:
           envFrom:
             - configMapRef:
                 name: json-placeholder-api-config
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          lifecycle:
+            # Sleeps before SIGTERM is sent so the pod's removal from the
+            # Service's endpoints (readinessProbe periodSeconds: 10, plus
+            # propagation to kube-proxy/iptables) finishes before traffic
+            # actually stops arriving — otherwise a rolling update or scale
+            # down can drop in-flight connections.
+            preStop:
+              exec:
+                command: ["sleep", "5"]
           livenessProbe:
             httpGet:
               path: /health/live

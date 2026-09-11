@@ -41,7 +41,9 @@ at run time.
 k8s/
   base/               Deployment, Service, Ingress, ConfigMap, HPA, PodDisruptionBudget
   overlays/local/     k3d: 1 replica, NODE_ENV=development, host api.localhost, otel-lgtm
-  overlays/prod/      3 replicas, larger resources; placeholder registry, tag and host
+  overlays/prod/      3 replicas, larger resources; registry and host are
+                      still placeholders, but CI promotes the tag (see
+                      docs/README-harness.md)
   k3d/                create-cluster.sh, delete-cluster.sh
 ```
 
@@ -50,12 +52,12 @@ Kustomize, so the manifests stay plain YAML with no templating.
 
 | Resource | Key settings |
 | --- | --- |
-| Deployment | Liveness probe → `/health/live`, readiness probe → `/health/ready`; `envFrom` the ConfigMap; `terminationGracePeriodSeconds: 30` |
+| Deployment | Liveness probe → `/health/live`, readiness probe → `/health/ready`; `envFrom` the ConfigMap; `terminationGracePeriodSeconds: 30`; `preStop` sleeps 5s before SIGTERM so the pod clears the Service's endpoints first; hardened `securityContext` (non-root, no privilege escalation, read-only root filesystem, all capabilities dropped); no `replicas:` — the HPA owns that field |
 | Service | ClusterIP, port 80 → container port 3000 |
 | Ingress | Traefik; each overlay sets the host |
 | ConfigMap | Same keys as `.env.example` |
 | HPA | Scales on CPU (target 70%): 2–5 replicas in base, 1–3 in local |
-| PodDisruptionBudget | `minAvailable: 1` |
+| PodDisruptionBudget | `maxUnavailable: 1` (not `minAvailable`, so a single-replica overlay can still be drained) |
 
 The two probes point at different endpoints on purpose. If liveness checked the
 upstream, an upstream outage would make Kubernetes restart every pod, which fixes
@@ -96,6 +98,14 @@ To see the manifests an overlay produces without applying them, run
   They're the same registry, reached from different networks. The local overlay's
   `images:` entry rewrites the image to the in-cluster name; using
   `localhost:5000` there causes `ImagePullBackOff`.
+- **The local overlay's committed image is whichever path touched it last.**
+  This walkthrough leaves it pointing at
+  `k3d-jsonplaceholder-registry:5000/...:local`, but Harness CI (see
+  docs/README-harness.md) commits over that with the real registry and the
+  commit SHA it just built every time it runs on `master`. Coming back to
+  this manual loop after Harness has run means re-pushing to
+  `localhost:5000/...:local` and rerunning `kustomize edit set image` (or
+  `git checkout` the file back) to restore it.
 - **Traefik is on host port 8080, not 80.** The cluster maps 8080 and 8443 so it
   doesn't collide with anything on the low ports.
 - **The image has no devDependencies.** The local overlay sets
@@ -105,4 +115,5 @@ To see the manifests an overlay produces without applying them, run
 - **CPU-based autoscaling barely applies here.** A proxy spends its time waiting
   on the upstream rather than using CPU, so the HPA rarely scales.
 - **The prod overlay has never been applied.** It renders cleanly, but its
-  registry, tag and host are `REPLACE_WITH_REAL_*` placeholders.
+  registry and host are `REPLACE_WITH_REAL_*` placeholders (the tag gets
+  promoted by CI once it's run on `master`).
