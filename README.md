@@ -7,7 +7,7 @@ envelope.
 The API is deliberately simple. The repo is a sandbox for learning NestJS and the
 platform around it: testing, containers, Kubernetes, CI/CD and telemetry.
 
-**Stack:** NestJS 11 · Fastify 5 · TypeScript 6 (type-checked by tsgo) · Vitest ·
+**Stack:** NestJS 12 · Fastify 5 · TypeScript 6 (type-checked by tsgo) · Vitest ·
 Docker · k3d + Kustomize · Harness · OpenTelemetry
 
 ## Key features
@@ -41,4 +41,3 @@ Open <http://localhost:3000/docs>.
 | `Dockerfile`, `docker-compose.yml`, `k8s/` | Image, local stack, Kustomize manifests | [Docker & Kubernetes](docs/README-docker-k8s.md) |
 | `.harness/` | CI/CD pipelines | [Harness](docs/README-harness.md) |
 | `src/instrumentation.ts` | OpenTelemetry setup | [Telemetry](docs/README-telemetry.md) |
-| Whole repo | Ongoing post-audit cleanup | [Cleanup plan](docs/README-cleanup-plan.md), [progress](docs/README-cleanup-progress.md) |
