@@ -61,6 +61,11 @@ describe('Posts (e2e)', () => {
     it('rejects a non-positive-integer id with 400', async () => {
       await api(app).get('/posts/abc').expect(400);
     });
+
+    it('rejects a hex or exponential-looking id with 400', async () => {
+      await api(app).get('/posts/0x1').expect(400);
+      await api(app).get('/posts/1e2').expect(400);
+    });
   });
 
   describe('POST /posts', () => {
@@ -117,6 +122,13 @@ describe('Posts (e2e)', () => {
       await api(app)
         .put('/posts/1')
         .send({ title: 't', body: 'b', userId: 'not-a-number' })
+        .expect(400);
+    });
+
+    it('rejects a partial body with 400 (PUT replaces, it does not merge)', async () => {
+      await api(app)
+        .put('/posts/1')
+        .send({ title: 'only a title' })
         .expect(400);
     });
   });

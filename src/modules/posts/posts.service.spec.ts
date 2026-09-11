@@ -126,7 +126,9 @@ describe('PostsService', () => {
       const error = new Error('upstream failure');
       upstream.put.mockRejectedValueOnce(error);
 
-      await expect(service.update(1, {})).rejects.toThrow(error);
+      await expect(
+        service.update(1, { title: 't', body: 'b', userId: 1 }),
+      ).rejects.toThrow(error);
     });
   });
 

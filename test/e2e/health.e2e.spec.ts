@@ -2,6 +2,7 @@ import { describe, it, beforeEach, afterEach, expect } from 'vitest';
 import { INestApplication } from '@nestjs/common';
 import { api } from '../support/api';
 import { createTestApp } from '../support/create-test-app';
+import { ErrorEnvelope } from '../support/response-envelope';
 import { mockUpstream } from '../support/upstream-mock';
 
 describe('Health (e2e)', () => {
@@ -36,12 +37,22 @@ describe('Health (e2e)', () => {
     expect(body.data.info).toHaveProperty('upstream');
   });
 
-  it('/health/ready reports unhealthy with 503 when the upstream ping fails', async () => {
+  it('/health/ready reports unhealthy with 503, in the standard error envelope', async () => {
     mockUpstream().get('/posts/1').reply(500);
 
     const response = await api(app).get('/health/ready').expect(503);
 
-    const body = response.body as { statusCode: number };
-    expect(body.statusCode).toBe(503);
+    // Naming the failed check here (rather than leaking Terminus's own
+    // HealthCheckResult into the error envelope) is HealthController's job
+    // — see the try/catch in health.controller.ts.
+    const body = response.body as ErrorEnvelope;
+    expect(body).toMatchObject({
+      statusCode: 503,
+      message: 'Health check failed: upstream',
+      error: 'Service Unavailable',
+      path: '/health/ready',
+    });
+    expect(body.timestamp).toEqual(expect.any(String));
+    expect(body.correlationId).toEqual(expect.any(String));
   });
 });

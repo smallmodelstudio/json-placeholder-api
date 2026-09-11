@@ -28,7 +28,10 @@ export class PostsService {
     return this.upstream.post<Post>('/posts', dto);
   }
 
-  update(id: number, dto: UpdatePostDto): Promise<Post> {
+  // PUT is a full replace, so it takes CreatePostDto (all fields required)
+  // rather than UpdatePostDto (PartialType, used by PATCH below) — see
+  // PostsController.update()'s comment for why that distinction matters.
+  update(id: number, dto: CreatePostDto): Promise<Post> {
     return this.upstream.put<Post>(`/posts/${id}`, dto);
   }
 

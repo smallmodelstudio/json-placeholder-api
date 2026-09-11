@@ -44,7 +44,17 @@ gitignored and loaded automatically. Values are validated at startup
 | `THROTTLE_TTL_MS` | `60000` | Rate-limit window |
 | `THROTTLE_LIMIT` | `20` | Requests allowed per window, per IP |
 
-The `OTEL_*` variables are covered in [Telemetry](README-telemetry.md).
+`TRUST_PROXY` (default `false`) isn't in that table because, like the
+`OTEL_*` variables covered in [Telemetry](README-telemetry.md), it's read
+directly from `process.env` rather than validated through
+`env.validation.ts` — `main.ts` needs it before `ConfigService` exists.
+Set it to `true` only when the app sits behind exactly one hop of reverse
+proxy that sets `X-Forwarded-For` (every k8s overlay, via Traefik — see
+[Docker & Kubernetes](README-docker-k8s.md)). It controls whether
+`ThrottlerGuard`'s per-IP rate limit reads the real client IP or the
+proxy's own address; turning it on when there's no proxy in front (as with
+docker-compose, or `npm run start*`) lets a client spoof its own
+rate-limit identity via that header.
 
 ## npm scripts
 

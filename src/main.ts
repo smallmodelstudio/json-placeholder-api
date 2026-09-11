@@ -13,7 +13,20 @@ import { registerCorrelationIdHook } from './common/hooks/correlation-id.hook';
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter(),
+    new FastifyAdapter({
+      // Trust exactly the reverse proxy directly in front of this app
+      // (Traefik, in every k8s overlay) so ThrottlerGuard's per-IP buckets
+      // (which key on request.ip) see the real client IP from
+      // X-Forwarded-For, not the proxy's own address — otherwise every
+      // client behind the same proxy shares one bucket. Read directly from
+      // process.env, the same as instrumentation.ts's OTEL_* variables:
+      // ConfigService doesn't exist yet at this point in bootstrap. Off by
+      // default — docker-compose and `npm run start*` expose the app
+      // directly, with no proxy in front, and trusting a client-supplied
+      // X-Forwarded-For there would let a client spoof its own rate-limit
+      // identity.
+      trustProxy: process.env['TRUST_PROXY'] === 'true',
+    }),
     { bufferLogs: true },
   );
   const configService: ConfigService<AppConfig, true> = app.get(ConfigService);

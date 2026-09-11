@@ -44,11 +44,13 @@ export class TodosController {
     return this.todosService.create(dto);
   }
 
+  // PUT is a full replace — see PostsController.update()'s comment for why
+  // PATCH below uses a different (partial) DTO.
   @Put(':id')
   @ApiEnvelopedResponse(Todo)
   update(
     @Param('id', ParsePositiveIntPipe) id: number,
-    @Body() dto: UpdateTodoDto,
+    @Body() dto: CreateTodoDto,
   ): Promise<Todo> {
     return this.todosService.update(id, dto);
   }

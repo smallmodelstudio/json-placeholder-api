@@ -126,6 +126,13 @@ describe('Photos (e2e)', () => {
       const body = response.body as SuccessEnvelope<Photo>;
       expect(body.data).toEqual(updated);
     });
+
+    it('rejects a partial body with 400 (PUT replaces, it does not merge)', async () => {
+      await api(app)
+        .put('/photos/1')
+        .send({ title: 'only a title' })
+        .expect(400);
+    });
   });
 
   describe('PATCH /photos/:id', () => {

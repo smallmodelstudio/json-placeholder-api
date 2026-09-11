@@ -112,6 +112,13 @@ describe('Comments (e2e)', () => {
       const body = response.body as SuccessEnvelope<Comment>;
       expect(body.data).toEqual(updated);
     });
+
+    it('rejects a partial body with 400 (PUT replaces, it does not merge)', async () => {
+      await api(app)
+        .put('/comments/1')
+        .send({ name: 'only a name' })
+        .expect(400);
+    });
   });
 
   describe('PATCH /comments/:id', () => {

@@ -1,4 +1,5 @@
 import { describe, it, beforeEach, expect, vi, Mock } from 'vitest';
+import { ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test, TestingModule } from '@nestjs/testing';
 import { HealthCheckService, HttpHealthIndicator } from '@nestjs/terminus';
@@ -70,6 +71,27 @@ describe('HealthController', () => {
         'upstream',
         'https://jsonplaceholder.typicode.com/posts/1',
       );
+    });
+
+    it('rethrows a failed check with a message naming the failed check', async () => {
+      const failure = new ServiceUnavailableException({
+        status: 'error',
+        info: {},
+        error: { upstream: { status: 'down' } },
+        details: {},
+      });
+      health.check.mockRejectedValueOnce(failure);
+
+      await expect(controller.ready()).rejects.toMatchObject({
+        message: 'Health check failed: upstream',
+      });
+    });
+
+    it('rethrows a non-Terminus error unchanged', async () => {
+      const error = new Error('boom');
+      health.check.mockRejectedValueOnce(error);
+
+      await expect(controller.ready()).rejects.toBe(error);
     });
   });
 });

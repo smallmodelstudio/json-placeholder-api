@@ -28,7 +28,8 @@ export class AlbumsService {
     return this.upstream.post<Album>('/albums', dto);
   }
 
-  update(id: number, dto: UpdateAlbumDto): Promise<Album> {
+  // PUT is a full replace — see PostsController.update()'s comment.
+  update(id: number, dto: CreateAlbumDto): Promise<Album> {
     return this.upstream.put<Album>(`/albums/${id}`, dto);
   }
 

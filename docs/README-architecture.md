@@ -86,8 +86,10 @@ base class.
 - **Nested routes** (`/posts/:id/comments`, `/users/:id/posts`) belong to the
   parent's controller, which delegates to the child's service.
 - **`UpstreamService`** retries on 5xx and network errors with exponential backoff
-  (100 ms, 200 ms, …). It never retries a 4xx. It turns axios errors into
-  `UpstreamException`, which the filter then maps to an HTTP status.
+  (100 ms, 200 ms, …). It never retries a 4xx, and never retries a non-idempotent
+  method (POST, PATCH) — doing so risks a duplicate write if the first attempt
+  actually reached upstream but its response didn't reach us. It turns axios
+  errors into `UpstreamException`, which the filter then maps to an HTTP status.
 
 ## Cross-cutting concerns
 
@@ -95,7 +97,7 @@ base class.
 | --- | --- | --- |
 | Validation | Unknown properties or query params return 400 | `ValidationPipe` in `app.module.ts` |
 | Caching | GETs cached by URL for `CACHE_TTL_MS`; `@CacheTTL()` overrides per route; `X-Cache: HIT` or `MISS` header; `/health/*` never cached | `http-cache.interceptor.ts` |
-| Rate limiting | `THROTTLE_LIMIT` requests per `THROTTLE_TTL_MS` per IP; `/health/*` exempt via `@SkipThrottle()` | `ThrottlerGuard` |
+| Rate limiting | `THROTTLE_LIMIT` requests per `THROTTLE_TTL_MS` per IP (the real client IP only if `TRUST_PROXY=true`, see [Getting started](README-getting-started.md)); `/health/*` exempt via `@SkipThrottle()` | `ThrottlerGuard` |
 | Timeouts | axios aborts each upstream attempt after `UPSTREAM_TIMEOUT_MS`; `TimeoutInterceptor` caps the whole request at `UPSTREAM_TIMEOUT_MS × (UPSTREAM_MAX_RETRIES + 2)` | `upstream.module.ts`, `timeout.interceptor.ts` |
 | Health | `/health/live` checks nothing, so it only fails if the process is down; `/health/ready` pings the upstream and returns 503 if it's unreachable | `health.controller.ts` |
 | Config | `configuration.ts` maps env vars to `AppConfig`; read them with `ConfigService<AppConfig, true>` and `{ infer: true }` | `src/config/` |

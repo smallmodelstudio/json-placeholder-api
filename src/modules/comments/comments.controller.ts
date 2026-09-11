@@ -44,11 +44,13 @@ export class CommentsController {
     return this.commentsService.create(dto);
   }
 
+  // PUT is a full replace — see PostsController.update()'s comment for why
+  // PATCH below uses a different (partial) DTO.
   @Put(':id')
   @ApiEnvelopedResponse(Comment)
   update(
     @Param('id', ParsePositiveIntPipe) id: number,
-    @Body() dto: UpdateCommentDto,
+    @Body() dto: CreateCommentDto,
   ): Promise<Comment> {
     return this.commentsService.update(id, dto);
   }

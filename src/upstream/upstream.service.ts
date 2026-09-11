@@ -114,7 +114,7 @@ export class UpstreamService {
     retryCount: number,
     config: AxiosRequestConfig,
   ): Observable<number> {
-    if (!this.isRetryable(error)) {
+    if (!this.isRetryable(error, config)) {
       throw error instanceof Error ? error : new Error(String(error));
     }
 
@@ -126,7 +126,16 @@ export class UpstreamService {
     return timer(backoffMs);
   }
 
-  private isRetryable(error: unknown): boolean {
+  private isRetryable(error: unknown, config: AxiosRequestConfig): boolean {
+    // Retrying POST/PATCH on a timeout or network error risks creating a
+    // duplicate write: the first attempt may already have gone through
+    // upstream even though its response never reached us. GET, PUT and
+    // DELETE are safe to retry because repeating them has the same effect
+    // as doing them once (PUT replaces a resource; deleting or reading a
+    // resource twice is the same as doing it once).
+    if (!this.isIdempotent(config.method)) {
+      return false;
+    }
     if (!axios.isAxiosError(error)) {
       return false;
     }
@@ -135,6 +144,12 @@ export class UpstreamService {
       return true;
     }
     return error.response.status >= 500;
+  }
+
+  private isIdempotent(method: string | undefined): boolean {
+    return ['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE'].includes(
+      (method ?? '').toUpperCase(),
+    );
   }
 
   private mapError(

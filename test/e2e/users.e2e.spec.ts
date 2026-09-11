@@ -121,6 +121,10 @@ describe('Users (e2e)', () => {
       const body = response.body as SuccessEnvelope<User>;
       expect(body.data).toEqual(updated);
     });
+
+    it('rejects a partial body with 400 (PUT replaces, it does not merge)', async () => {
+      await api(app).put('/users/1').send({ name: 'only a name' }).expect(400);
+    });
   });
 
   describe('PATCH /users/:id', () => {

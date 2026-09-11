@@ -30,7 +30,9 @@ export async function createTestApp(
   const moduleFixture: TestingModule = await builder.compile();
 
   const app = moduleFixture.createNestApplication<NestFastifyApplication>(
-    new FastifyAdapter(),
+    // trustProxy mirrors main.ts, so a test can exercise the TRUST_PROXY
+    // behaviour via withEnvOverrides (see throttle.e2e.spec.ts).
+    new FastifyAdapter({ trustProxy: process.env['TRUST_PROXY'] === 'true' }),
   );
   registerCorrelationIdHook(app.getHttpAdapter().getInstance());
   await app.init();

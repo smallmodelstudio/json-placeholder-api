@@ -22,6 +22,7 @@ import { AlbumsModule } from './modules/albums/albums.module';
 import { PhotosModule } from './modules/photos/photos.module';
 import { HealthModule } from './health/health.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
+import { StrictNumberFormatPipe } from './common/pipes/strict-number-format.pipe';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { HttpCacheInterceptor } from './common/interceptors/http-cache.interceptor';
@@ -119,6 +120,13 @@ function isPinoPrettyAvailable(): boolean {
   ],
   controllers: [],
   providers: [
+    // Multiple APP_PIPE providers run in this array's order (same
+    // reasoning as the APP_INTERCEPTOR ordering comment below), and that
+    // order matters here: StrictNumberFormatPipe has to see a route's raw
+    // param/query string before ValidationPipe's own `+value` coercion
+    // quietly turns "0x1" or "1e2" into a valid-looking number — see its
+    // own doc comment for why.
+    { provide: APP_PIPE, useClass: StrictNumberFormatPipe },
     {
       provide: APP_PIPE,
       useValue: new ValidationPipe({

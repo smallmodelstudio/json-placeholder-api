@@ -25,7 +25,8 @@ export class PhotosService {
     return this.upstream.post<Photo>('/photos', dto);
   }
 
-  update(id: number, dto: UpdatePhotoDto): Promise<Photo> {
+  // PUT is a full replace — see PostsController.update()'s comment.
+  update(id: number, dto: CreatePhotoDto): Promise<Photo> {
     return this.upstream.put<Photo>(`/photos/${id}`, dto);
   }
 

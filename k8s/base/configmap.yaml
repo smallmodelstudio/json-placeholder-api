@@ -13,6 +13,10 @@ data:
   CACHE_TTL_MS: '30000'
   THROTTLE_TTL_MS: '60000'
   THROTTLE_LIMIT: '20'
+  # Every overlay's Ingress sits behind Traefik (k8s/base/ingress.yaml), a
+  # single hop, so it's safe to trust X-Forwarded-For here — unlike the
+  # .env.example default, where the app is reachable directly.
+  TRUST_PROXY: 'true'
   # Same http://localhost:4318 default as .env.example — wrong for every
   # real cluster (there's no collector at localhost inside a pod), but
   # instrumentation.ts degrades to failed OTLP exports rather than crashing,

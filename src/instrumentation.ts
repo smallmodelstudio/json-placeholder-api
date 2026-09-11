@@ -14,6 +14,7 @@ import {
   ATTR_SERVICE_NAME,
   ATTR_SERVICE_VERSION,
 } from '@opentelemetry/semantic-conventions';
+import { registerShutdownHandler } from './common/utils/register-shutdown-handler';
 
 // No explicit `url` on either exporter: both fall back to the standard
 // OTEL_EXPORTER_OTLP_ENDPOINT (or the more specific *_TRACES_/*_METRICS_
@@ -47,9 +48,10 @@ sdk.start();
 
 // Terminus's shutdown hook (app.enableShutdownHooks(), app.module.ts) drains
 // the app itself; this drains the last batch of spans/metrics so a request
-// handled right before shutdown isn't lost.
-for (const signal of ['SIGTERM', 'SIGINT']) {
-  process.on(signal, () => {
-    void sdk.shutdown();
-  });
-}
+// handled right before shutdown isn't lost. registerShutdownHandler (not a
+// bare `void sdk.shutdown()`) matters here: sdk.shutdown() rejects when the
+// collector it's flushing to is unreachable, and an unhandled rejection at
+// this point crashes the process with a non-zero exit code on every
+// SIGTERM — which is exactly what happens today in the prod overlay, which
+// has no OTel backend (see docs/README-telemetry.md).
+registerShutdownHandler(() => sdk.shutdown());
