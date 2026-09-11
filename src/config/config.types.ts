@@ -1,5 +1,7 @@
+import { Environment } from './env.validation';
+
 export interface AppConfig {
-  env: string;
+  env: Environment;
   port: number;
   http: {
     baseUrl: string;

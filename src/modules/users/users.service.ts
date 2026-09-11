@@ -7,6 +7,7 @@ import { PostsService } from '../posts/posts.service';
 import { Todo } from '../todos/entities/todo.entity';
 import { TodosService } from '../todos/todos.service';
 import { CreateUserDto } from './dto/create-user.dto';
+import { QueryUsersDto } from './dto/query-users.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { User } from './entities/user.entity';
 
@@ -19,8 +20,15 @@ export class UsersService {
     private readonly albumsService: AlbumsService,
   ) {}
 
-  findAll(): Promise<User[]> {
-    return this.upstream.get<User[]>('/users');
+  findAll(query: QueryUsersDto): Promise<User[]> {
+    return this.upstream.get<User[]>('/users', {
+      ...((query.username !== undefined || query.email !== undefined) && {
+        params: {
+          ...(query.username !== undefined && { username: query.username }),
+          ...(query.email !== undefined && { email: query.email }),
+        },
+      }),
+    });
   }
 
   findOne(id: number): Promise<User> {

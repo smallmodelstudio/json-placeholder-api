@@ -33,7 +33,7 @@ Unit specs sit next to the file they test (`*.spec.ts`).
 ## Request lifecycle
 
 ```text
-onRequest hook          set correlationId; echo it in x-correlation-id
+onRequest hook          set correlationId (validated/bounded, else generated); echo it in x-correlation-id
 pino-http               access log: method, URL, status, duration, correlationId
 ThrottlerGuard          429 when the client IP is over its limit
 TransformInterceptor    wrap the handler's result in { data, meta }
@@ -121,7 +121,7 @@ base class.
 | Timeouts      | axios aborts each upstream attempt after `UPSTREAM_TIMEOUT_MS`; `TimeoutInterceptor` caps the whole request at `UPSTREAM_TIMEOUT_MS × (UPSTREAM_MAX_RETRIES + 2)`                                  | `upstream.module.ts`, `timeout.interceptor.ts` |
 | Health        | `/health/live` checks nothing, so it only fails if the process is down; `/health/ready` pings the upstream and returns 503 if it's unreachable                                                     | `health.controller.ts`                         |
 | Config        | `configuration.ts` maps env vars to `AppConfig`; read them with `ConfigService<AppConfig, true>` and `{ infer: true }`                                                                             | `src/config/`                                  |
-| API docs      | The Swagger CLI plugin generates schemas from DTO types; `@ApiEnvelopedResponse()` documents the envelope                                                                                          | `nest-cli.json`, `common/decorators/`          |
+| API docs      | The Swagger CLI plugin generates schemas from DTO types; `@ApiEnvelopedResponse()` documents the success envelope, `@ApiCommonErrorResponses()` the 400/404/429/502/504 error envelope             | `nest-cli.json`, `common/decorators/`          |
 
 ## Gotchas
 
@@ -133,7 +133,12 @@ base class.
   copy off the raw request. Because the hook lives outside Nest, `main.ts` and
   `test/support/create-test-app.ts` both have to call it, plus build the same
   `FastifyAdapter`; `src/bootstrap.ts` is the shared code both call into so
-  the two can't drift apart by hand.
+  the two can't drift apart by hand. An incoming `x-correlation-id` is only
+  reused if it's a non-empty string of up to 128 characters from
+  `[A-Za-z0-9_-]` (see `isValidCorrelationId` in `correlation-id.hook.ts`) —
+  anything else is replaced with a generated id, the same as a missing
+  header, so a client can't smuggle log-line-breaking or oversized values
+  into every log line and the response envelope for the request.
 - **An undeclared query param returns 400**, because of `forbidNonWhitelisted`.
   Every new query param needs a field on its DTO.
 - **Fastify's `request.url` includes the query string.** The cache interceptor

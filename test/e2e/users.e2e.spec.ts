@@ -50,6 +50,38 @@ describe('Users (e2e)', () => {
       const body = response.body as SuccessEnvelope<User[]>;
       expect(body.data).toEqual(users);
     });
+
+    it('forwards ?username= as an upstream query param', async () => {
+      const users = [{ id: 1, ...validUserPayload }];
+      mockUpstream()
+        .get('/users')
+        .query({ username: 'Bret' })
+        .reply(200, users);
+
+      const response = await api(app).get('/users?username=Bret').expect(200);
+
+      const body = response.body as SuccessEnvelope<User[]>;
+      expect(body.data).toEqual(users);
+    });
+
+    it('forwards ?email= as an upstream query param', async () => {
+      const users = [{ id: 1, ...validUserPayload }];
+      mockUpstream()
+        .get('/users')
+        .query({ email: 'sincere@april.biz' })
+        .reply(200, users);
+
+      const response = await api(app)
+        .get('/users?email=sincere@april.biz')
+        .expect(200);
+
+      const body = response.body as SuccessEnvelope<User[]>;
+      expect(body.data).toEqual(users);
+    });
+
+    it('rejects a malformed email with 400', async () => {
+      await api(app).get('/users?email=not-an-email').expect(400);
+    });
   });
 
   describe('GET /users/:id', () => {

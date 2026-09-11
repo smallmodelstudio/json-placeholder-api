@@ -11,7 +11,7 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { AppConfig } from './config/config.types';
 import configuration from './config/configuration';
-import { validate } from './config/env.validation';
+import { Environment, validate } from './config/env.validation';
 import { UpstreamModule } from './upstream/upstream.module';
 import { MetricsModule } from './common/metrics/metrics.module';
 import { PostsModule } from './modules/posts/posts.module';
@@ -61,14 +61,14 @@ function isPinoPrettyAvailable(): boolean {
       inject: [ConfigService],
       useFactory: (configService: ConfigService<AppConfig, true>) => {
         const isProduction =
-          configService.get('env', { infer: true }) === 'production';
+          configService.get('env', { infer: true }) === Environment.Production;
         return {
           pinoHttp: {
             // Tests boot the full AppModule (test/support/create-test-app.ts)
             // but never call useLogger(), and don't want JSON log spam
             // either way.
             level:
-              configService.get('env', { infer: true }) === 'test'
+              configService.get('env', { infer: true }) === Environment.Test
                 ? 'silent'
                 : isProduction
                   ? 'info'

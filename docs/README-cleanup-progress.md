@@ -80,6 +80,53 @@ matching the one in the response envelope.
 **Docs touched:** `README-architecture.md` (layout, request lifecycle,
 interceptor-ordering note, correlation-id gotcha).
 
-## Groups 3–6 — not started
+## Group 3 — Config, correlation ids, error messages, Swagger — done (branch `cleanup/config-correlation-swagger`)
+
+1. **Split env defaults.** `configuration.ts` used to re-parse `process.env`
+   with its own copy of every default (`'3000'`, `'development'`, …),
+   separate from `env.validation.ts`'s. It now calls `validate(process.env)`
+   itself and just reshapes the result into `AppConfig`'s nesting — one place
+   (`env.validation.ts`) owns every default and every parse. `AppConfig.env`
+   is now the actual `Environment` union (exported from `env.validation.ts`)
+   instead of `string`; `app.module.ts`'s two `configService.get('env', ...)`
+   comparisons now compare against `Environment.Production`/`Environment.Test`
+   rather than string literals (required once the type stopped being `string`
+   — `@typescript-eslint/no-unsafe-enum-comparison` caught it immediately).
+2. **Unvalidated `x-correlation-id`.** A client-supplied header used to be
+   echoed back verbatim into the response header, every log line for the
+   request, and the response envelope. `correlation-id.hook.ts` now only
+   reuses it if it's 1–128 characters of `[A-Za-z0-9_-]`
+   (`isValidCorrelationId`); anything else — oversized, or containing
+   whitespace/control characters that could break a log line — falls back to
+   a generated id, same as a missing header.
+3. **Upstream method/path leak.** `AllExceptionsFilter.resolveUpstreamException`
+   used to pass a 4xx's `exception.message` straight to the client — built by
+   `UpstreamService.mapError` as `"Upstream responded with 404: GET
+   /posts/999"`, i.e. internal request detail with no business reaching a
+   caller. It now sends a generic, status-derived message (`STATUS_CODES[status]`,
+   the same text Nest's own exceptions default to), matching `error`.
+4. **Swagger.** `metaSchema.correlationId` claimed `format: 'uuid'`; it's
+   sometimes a client-supplied string or a 32-hex-char trace id, so the
+   format claim is gone. Added `ApiCommonErrorResponses()`
+   (400/404/429/502/504, `errorEnvelopeSchema`) as a class decorator on all
+   six resource controllers — previously only `HealthController`'s 503 was
+   documented. Added `QueryUsersDto` (`username`, `email`) — `GET /users` was
+   the one list endpoint with no query DTO at all, so unlike every other
+   resource's `?xId=` filter, an unknown `/users` query param was silently
+   ignored instead of the usual 400.
+
+**Verification:** lint (0 issues), typecheck, build, `prettier --check`, and
+`vitest run` (unit + e2e + contract) all clean — 324 tests passed, 3 contract
+tests skipped as designed. Also checked by hand against the compiled build:
+an invalid `x-correlation-id` header is replaced rather than echoed, a
+upstream 404's `message` is `"Not Found"` with no method/path in it, `GET
+/users?username=` and `?email=` forward as upstream params (and an invalid
+`?email=` 400s), and `/docs-json` lists 400/404/429/502/504 for every
+resource route.
+
+**Docs touched:** `README-architecture.md` (request lifecycle,
+correlation-id gotcha, cross-cutting-concerns API-docs row).
+
+## Groups 4–6 — not started
 
 See the plan for scope.

@@ -64,14 +64,14 @@ describe('UsersController', () => {
   });
 
   describe('findAll', () => {
-    it('delegates to UsersService.findAll', async () => {
+    it('delegates to UsersService.findAll with the query dto', async () => {
       const users: User[] = [sampleUser];
       service.findAll.mockResolvedValueOnce(users);
 
-      const result = await controller.findAll();
+      const result = await controller.findAll({ username: 'Bret' });
 
       expect(result).toBe(users);
-      expect(service.findAll).toHaveBeenCalledWith();
+      expect(service.findAll).toHaveBeenCalledWith({ username: 'Bret' });
     });
   });
 

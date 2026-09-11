@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import {
+  ApiCommonErrorResponses,
   ApiEnvelopedEmptyResponse,
   ApiEnvelopedResponse,
 } from '../../common/decorators/api-envelope-response.decorator';
@@ -24,6 +25,7 @@ import { Post } from './entities/post.entity';
 import { PostsService } from './posts.service';
 
 @ApiTags('posts')
+@ApiCommonErrorResponses()
 @Controller('posts')
 export class PostsController {
   constructor(private readonly postsService: PostsService) {}

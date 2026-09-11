@@ -94,17 +94,24 @@ export class AllExceptionsFilter implements ExceptionFilter {
     }
 
     // A 4xx from upstream reflects something meaningful about the request
-    // itself (e.g. a post that doesn't exist), so it's passed through as-is.
+    // itself (e.g. a post that doesn't exist), so its status is passed
+    // through unchanged. The message isn't: `exception.message` carries the
+    // upstream method/path (e.g. "Upstream responded with 404: GET
+    // /posts/999", from UpstreamService.mapError) for logging, and that
+    // internal detail has no business reaching the client — a generic,
+    // status-derived message does instead, the same text Nest's own
+    // exceptions default to when no custom message is given.
     // Anything else — a 5xx response, or no response at all — means the
     // upstream failed us, which is a 502 regardless of the underlying cause.
     if (
       exception.upstreamStatus !== undefined &&
       exception.upstreamStatus < 500
     ) {
+      const statusText = STATUS_CODES[exception.upstreamStatus] ?? 'Error';
       return {
         statusCode: exception.upstreamStatus,
-        message: exception.message,
-        error: STATUS_CODES[exception.upstreamStatus] ?? 'Error',
+        message: statusText,
+        error: statusText,
       };
     }
 
