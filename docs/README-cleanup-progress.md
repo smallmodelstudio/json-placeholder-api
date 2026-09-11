@@ -197,6 +197,48 @@ both overlays and reading the resulting diff, not by running the pipeline.
 placeholder status, a new gotcha on the local overlay's image drifting
 between the manual loop and Harness-promoted values).
 
-## Groups 5–6 — not started
+## Group 5 — Housekeeping — done (branch `cleanup/housekeeping`)
+
+1. **Unused dependencies.** Dropped `ts-loader` (no webpack build —
+   `nest-cli.json` has no `builder` override), `source-map-support` (never
+   imported), `@eslint/eslintrc` (never imported; `eslint.config.mjs` is
+   flat-config only), and `@opentelemetry/instrumentation-http` /
+   `@opentelemetry/instrumentation-nestjs-core` (never imported directly —
+   both are already pulled in transitively by
+   `getNodeAutoInstrumentations()`, so removing the explicit dependency
+   changes nothing at runtime). `npm uninstall` regenerated
+   `package-lock.json`; build/lint/typecheck/tests all still pass.
+2. **Stale comments.** `instrumentation.ts`'s shutdown-hook comment said
+   `app.enableShutdownHooks()` lived in `app.module.ts`; it's actually
+   called in `main.ts`. `.env.example`'s `OTEL_EXPORTER_OTLP_ENDPOINT`
+   comment said `k8s/base/configmap.yaml` points it at the in-cluster
+   collector; the base ConfigMap actually keeps the `localhost:4318`
+   default — it's `k8s/overlays/local`'s Kustomize patch that redirects it
+   to the `otel-lgtm` Service, and `overlays/prod` has no backend at all.
+3. **Lint rules.** `eslint.config.mjs` set `no-explicit-any` to `off` and
+   `no-floating-promises`/`no-unsafe-argument` to `warn` — all three are
+   `error` in `typescript-eslint`'s `recommendedTypeChecked` already, so
+   the overrides just relaxed the default. Deleted the override block
+   entirely (confirmed `lint:check` still reports zero issues at the
+   default severity) rather than spelling out `'error'` redundantly.
+4. **Missing test coverage.** `env.validation.spec.ts` covered `NODE_ENV`,
+   `PORT` and `UPSTREAM_BASE_URL` but never touched `CACHE_TTL_MS`,
+   `THROTTLE_TTL_MS` or `THROTTLE_LIMIT`; added cases for a valid zero
+   `CACHE_TTL_MS` and rejection of a negative `CACHE_TTL_MS` and a
+   sub-1 `THROTTLE_TTL_MS`/`THROTTLE_LIMIT`. `vitest.config.mts` had no
+   coverage thresholds, so a regression could ship silently; added a
+   global statements/branches/functions/lines floor (90/75/90/90) set just
+   below the current baseline (92.2/78.83/91.97/92.8) — verified it both
+   passes as configured and actually fails `test:cov` when a threshold is
+   pushed above the baseline.
+
+**Verification:** lint (0 issues), lint:check (0 issues), typecheck, build,
+`prettier --check`, and `vitest run` all clean — 328 tests passed, 3
+contract tests skipped as designed. `test:cov` passes its new thresholds.
+
+**Docs touched:** `README-code-quality.md` (removed the now-nonexistent
+lint rule overrides section), `README-testing.md` (coverage thresholds).
+
+## Group 6 — not started
 
 See the plan for scope.

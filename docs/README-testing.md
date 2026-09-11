@@ -31,7 +31,9 @@ Each kind of test is its own Vitest project, defined in `vitest.config.mts`.
   `test:all` stays offline.
 - **Coverage (`npm run test:cov`) covers the `unit` project only.** e2e tests run
   the same code over HTTP and would inflate the numbers. The report goes to
-  `coverage/`.
+  `coverage/`. `vitest.config.mts` sets a statements/branches/functions/lines
+  floor (90/75/90/90) below the current baseline, so a real regression fails
+  the run instead of silently shipping.
 
 ## Adding a unit test
 

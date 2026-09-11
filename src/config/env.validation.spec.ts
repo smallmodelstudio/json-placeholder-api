@@ -47,4 +47,28 @@ describe('validate', () => {
       validate({ ...validEnv, UPSTREAM_BASE_URL: 'not-a-url' }),
     ).toThrow(/Invalid environment variables/);
   });
+
+  it('accepts a zero CACHE_TTL_MS', () => {
+    const result = validate({ ...validEnv, CACHE_TTL_MS: '0' });
+
+    expect(result.CACHE_TTL_MS).toBe(0);
+  });
+
+  it('rejects a negative CACHE_TTL_MS', () => {
+    expect(() => validate({ ...validEnv, CACHE_TTL_MS: '-1' })).toThrow(
+      /Invalid environment variables/,
+    );
+  });
+
+  it('rejects a THROTTLE_TTL_MS below 1', () => {
+    expect(() => validate({ ...validEnv, THROTTLE_TTL_MS: '0' })).toThrow(
+      /Invalid environment variables/,
+    );
+  });
+
+  it('rejects a THROTTLE_LIMIT below 1', () => {
+    expect(() => validate({ ...validEnv, THROTTLE_LIMIT: '0' })).toThrow(
+      /Invalid environment variables/,
+    );
+  });
 });

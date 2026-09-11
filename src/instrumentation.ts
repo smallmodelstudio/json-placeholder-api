@@ -59,7 +59,7 @@ const sdk = new NodeSDK({
 
 sdk.start();
 
-// Terminus's shutdown hook (app.enableShutdownHooks(), app.module.ts) drains
+// Terminus's shutdown hook (app.enableShutdownHooks(), main.ts) drains
 // the app itself; this drains the last batch of spans/metrics so a request
 // handled right before shutdown isn't lost. registerShutdownHandler (not a
 // bare `void sdk.shutdown()`) matters here: sdk.shutdown() rejects when the

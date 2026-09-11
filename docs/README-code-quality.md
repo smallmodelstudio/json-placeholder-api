@@ -46,10 +46,7 @@ On top of `strict`, `tsconfig.json` turns on:
 
 There are no path aliases or `baseUrl`, so every internal import is relative.
 
-## Lint rule overrides
+## Lint rules
 
-These rules are relaxed from the recommended set:
-
-- `@typescript-eslint/no-explicit-any` is off.
-- `@typescript-eslint/no-floating-promises` is a warning.
-- `@typescript-eslint/no-unsafe-argument` is a warning.
+`eslint.config.mjs` runs `typescript-eslint`'s `recommendedTypeChecked` set
+as-is — no rule is relaxed from its default severity.
