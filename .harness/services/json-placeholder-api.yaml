@@ -15,7 +15,7 @@ service:
                   connectorRef: account.REPLACE_WITH_REAL_GITHUB_CONNECTOR
                   gitFetchType: Branch
                   branch: master
-                  # One overlay path per environment (Phase 6's base +
+                  # One overlay path per environment (k8s/base +
                   # overlays/{local,prod}); the environment supplies which
                   # folder via its own `overlay` variable, kept as a single
                   # source of truth rather than duplicating this manifest

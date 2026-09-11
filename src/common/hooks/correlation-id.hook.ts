@@ -33,13 +33,12 @@ export function registerCorrelationIdHook(instance: FastifyInstance): void {
 // `instrumentation-http` (loaded by instrumentation.ts, before Nest even
 // boots) starts a span for the incoming request before Fastify's own
 // routing/hooks run, so it's already the active span by the time this hook
-// fires — reusing its trace id as the default correlationId is what
-// PLAN.md means by "unify correlationId with the OTel trace id": the same
-// identifier now threads through the response envelope, the access log
-// line, and every pino log line for the request (via
+// fires — reusing its trace id as the default correlationId means the same
+// identifier threads through the response envelope, the access log line,
+// and every pino log line for the request (via
 // @opentelemetry/instrumentation-pino's log correlation). Without the SDK
 // running (unit/e2e tests, `nest start` without `--import`) there's no
-// active span, so this falls back to the pre-Phase-8 randomUUID().
+// active span, so this falls back to randomUUID().
 //
 // A client-supplied x-correlation-id is still honoured as-is above — the
 // API's existing contract of echoing back whatever the caller sent takes

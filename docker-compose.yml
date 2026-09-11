@@ -22,8 +22,8 @@ services:
       - otel
     restart: unless-stopped
   # grafana/otel-lgtm bundles an OTel Collector plus Grafana, Tempo (traces),
-  # Prometheus (metrics), and Loki (logs), pre-wired together — the
-  # "recommended default" backend from PLAN.md's Phase 8, free and local.
+  # Prometheus (metrics), and Loki (logs), pre-wired together — free and
+  # local.
   # Grafana's own UI runs on 3000 inside the container, same as the app, so
   # it's remapped to 3001 on the host to avoid a collision.
   otel:

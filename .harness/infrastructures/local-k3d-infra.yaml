@@ -8,10 +8,9 @@ infrastructureDefinition:
   type: KubernetesDirect
   spec:
     # The Kubernetes connector should use "Inherit from Delegate" against the
-    # Delegate installed into this same k3d cluster (see .harness/README.md)
-    # — the whole point of PLAN.md's Phase 7 correction is that Harness never
-    # needs inbound access to the cluster, only an outbound-only Delegate
-    # already running inside it.
+    # Delegate installed into this same k3d cluster (see docs/README-harness.md)
+    # — Harness never needs inbound access to the cluster, only an
+    # outbound-only Delegate already running inside it.
     connectorRef: account.REPLACE_WITH_REAL_K8S_CONNECTOR
     namespace: default
     releaseName: json-placeholder-api

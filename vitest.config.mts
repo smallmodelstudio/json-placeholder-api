@@ -16,7 +16,7 @@ export default defineConfig({
     },
     // Three projects instead of three jest config files. Run one with
     // `--project <name>`, or omit the flag to run all of them. See
-    // test/README.md for what belongs in each.
+    // docs/README-testing.md for what belongs in each.
     projects: [
       {
         test: {

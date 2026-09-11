@@ -37,8 +37,7 @@ const sdk = new NodeSDK({
       '@opentelemetry/instrumentation-fs': { enabled: false },
       // Log *correlation* (trace_id/span_id injected into pino lines) stays
       // on; log *sending* (mirroring pino output to the OTel Logs API) is
-      // out of scope for this phase — PLAN.md's ask is trace/metric export
-      // plus trace-correlated pino output, not a full logs pipeline.
+      // off — logs stay on stdout, with no OTLP logs pipeline.
       '@opentelemetry/instrumentation-pino': { disableLogSending: true },
     }),
   ],

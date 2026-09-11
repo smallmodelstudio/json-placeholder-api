@@ -4,7 +4,7 @@ resources:
   - ../../base
 
 # Unvalidated against a real cluster — there is no prod cluster in this
-# project yet (PLAN.md Phase 6 only targets local k3d). Written to the same
+# project yet. Written to the same
 # shape the local overlay proved out, so pointing it at a real registry and
 # ingress host is the only work left when that cluster exists.
 images:

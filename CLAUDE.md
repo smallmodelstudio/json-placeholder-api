@@ -2,11 +2,15 @@
 
 ## Project Context
 
-- **Plan:** See `PLAN.md`
-- **Current State:** See `PROGRESS.md`
+- **Overview and docs index:** `README.md`
+- **Topic docs:** `docs/README-<topic>.md`
 
 ## Workflow Rules
 
-1. Before starting any work, check `PROGRESS.md` for current context.
-2. Follow strict TypeScript rules defined in `tsconfig.json`.
-3. When a task or phase is verified working with tests, automatically update `PROGRESS.md`.
+1. Before starting work, read the docs for the area you're changing.
+2. Follow the strict TypeScript rules in `tsconfig.json` (see `docs/README-code-quality.md`).
+3. Documentation lives only in `docs/`, plus the root `README.md` index. Don't add
+   Markdown files anywhere else.
+4. When a change alters behaviour, commands or configuration covered in `docs/`,
+   update that doc in the same change. Docs describe the current state, not its
+   history.

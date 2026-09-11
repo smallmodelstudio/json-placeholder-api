@@ -50,7 +50,7 @@ async function bootstrap() {
   SwaggerModule.setup('docs', app, swaggerDocument);
 
   // Bind 0.0.0.0 (not just localhost) so the app is reachable from outside
-  // its container once it's deployed in one (Phase 5).
+  // its container.
   await app.listen({
     port: configService.get('port', { infer: true }),
     host: '0.0.0.0',

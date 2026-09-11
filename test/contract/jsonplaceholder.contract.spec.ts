@@ -8,10 +8,10 @@ import { createTestApp } from '../support/create-test-app';
 
 // Opt-in: hits the real jsonplaceholder.typicode.com through our own app
 // (real routing, real UpstreamService, no nock). Excluded from `npm test`
-// and `npm run test:e2e` by filename (`.contract-spec.ts`, not matched by
-// either of their testRegex patterns) and by this explicit env-gate, so a
-// config run without RUN_CONTRACT_TESTS=1 just skips rather than reaching
-// out to the real network. Run with `npm run test:contract`. The point is
+// and `npm run test:e2e` by the Vitest project split, and from `test:all`
+// by this explicit env-gate, so a run without RUN_CONTRACT_TESTS=1 just
+// skips rather than reaching out to the real network. Run with
+// `npm run test:contract`. The point is
 // to catch upstream drift that our nock fixtures — which we wrote by hand,
 // so they only ever assert what we already believe is true — never could.
 const describeIfEnabled =
@@ -41,8 +41,7 @@ describeIfEnabled('JSONPlaceholder contract', () => {
     }
     // expect.any() must be a bare argument here, not nested inside an
     // object literal passed to toMatchObject/objectContaining — the latter
-    // trips @typescript-eslint/no-unsafe-assignment (see posts.e2e-spec.ts
-    // history / PROGRESS.md Phase 3 notes).
+    // trips @typescript-eslint/no-unsafe-assignment.
     expect(post.id).toEqual(expect.any(Number));
     expect(post.userId).toEqual(expect.any(Number));
     expect(post.title).toEqual(expect.any(String));

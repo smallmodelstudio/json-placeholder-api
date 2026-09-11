@@ -7,7 +7,8 @@ export enum UpstreamErrorType {
 /**
  * Domain-level error for failures talking to the upstream API. Deliberately
  * not an HttpException — translating it into an HTTP response is the job of
- * an exception filter (Phase 3), not of the code that detects the failure.
+ * an exception filter (AllExceptionsFilter), not of the code that detects
+ * the failure.
  */
 export class UpstreamException extends Error {
   constructor(

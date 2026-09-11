@@ -1,7 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# Pinned to match .nvmrc (Node 24, the current LTS line) rather than the
-# Node 22 LTS PLAN.md sketched before that decision was made.
+# Pinned to match .nvmrc (Node 24, the current LTS line).
 ARG NODE_VERSION=24-slim
 
 # ---- deps: install once, reused by the build stage --------------------

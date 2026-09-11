@@ -1,243 +1,43 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# JSONPlaceholder Proxy API
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+A NestJS API in front of [JSONPlaceholder](https://jsonplaceholder.typicode.com)
+that adds validation, caching, rate limiting, retries and a consistent response
+envelope.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+The API is deliberately simple. The repo is a sandbox for learning NestJS and the
+platform around it: testing, containers, Kubernetes, CI/CD and telemetry.
 
-## Description
+**Stack:** NestJS 11 · Fastify 5 · TypeScript 6 (type-checked by tsgo) · Vitest ·
+Docker · k3d + Kustomize · Harness · OpenTelemetry
 
-A [NestJS](https://nestjs.com/) proxy API in front of [JSONPlaceholder](https://jsonplaceholder.typicode.com/), adding typed DTOs, validation, retries/timeouts, and a consistent response/error envelope.
+## Key features
 
-### A note on writes
+- Six resources (posts, users, comments, todos, albums, photos) plus nested routes
+- Every response wrapped in `{ data, meta }`; every error in a single error envelope
+- A correlation ID on every request, shared with the OpenTelemetry trace ID
+- Response caching, per-IP rate limiting, upstream retries with backoff, timeouts
+- Liveness and readiness health checks; Swagger UI at `/docs`
+- Unit, e2e and contract tests as three Vitest projects
+- Multi-stage Docker image, Kustomize manifests for k3d, Harness pipelines as code
 
-`POST`/`PUT`/`PATCH`/`DELETE` on `/posts` are fully implemented and proxy straight through to JSONPlaceholder, but **JSONPlaceholder fakes persistence**: it returns a plausible response (e.g. a new `id` on create) without actually storing anything server-side. A `GET` immediately after a write will not reflect the change. This is upstream behavior, not a bug in this proxy.
-
-### Production hardening
-
-- **Caching:** GET responses are cached in-memory (`CACHE_TTL_MS`, default 30s) — check the `X-Cache: HIT`/`MISS` response header. `/health/*` is always excluded.
-- **Rate limiting:** requests are capped per IP (`THROTTLE_LIMIT` per `THROTTLE_TTL_MS`, default 20 per 60s); exceeding it returns `429`. `/health/*` is exempt so infra probes are never throttled.
-- **Health checks:** `GET /health/live` reports whether the process is up, with no dependency checks — point Kubernetes' liveness probe here. `GET /health/ready` pings JSONPlaceholder and returns `503` if it's unreachable — point the readiness probe here.
-
-### API documentation
-
-Interactive Swagger UI is served at `/docs` (raw OpenAPI JSON at `/docs-json`) once the app is running. DTO and entity schemas are generated automatically by the `@nestjs/swagger` CLI plugin from their TypeScript types and existing `class-validator` decorators — they aren't hand-annotated. Every documented success response reflects the real `{ data, meta }` envelope (see `src/common/decorators/api-envelope-response.decorator.ts`), not the bare entity type, since that's what a client actually receives.
-
-## Architecture
-
-```text
-Controller → Service → UpstreamService (HttpService/axios) → jsonplaceholder.typicode.com
-```
-
-- **`UpstreamService`** (`src/upstream/`) is the single choke point for all outbound HTTP: typed `get/post/put/patch/delete`, retry with backoff on 5xx/network errors (never on 4xx), and axios-error → `UpstreamException` mapping. Feature services never touch `HttpService` directly.
-- **Six resource modules** (`src/modules/`) each follow the same shape — `entities/`, `dto/{query,create,update}-*.dto.ts`, service, controller — hand-written per resource rather than a generic base class, since premature generics tend to fight Nest's DI system at this scale. Nested routes (e.g. `/posts/:id/comments`) are owned by the parent resource's controller, delegating to the child resource's service.
-- **Cross-cutting concerns live in `AppModule`**, not `main.ts`: global `ValidationPipe`, `AllExceptionsFilter`, the `Logging`/`Transform`/`Cache`/`Timeout` interceptor chain, and `ThrottlerGuard` are all registered as `APP_*` providers. Both `main.ts` and the E2E test bootstrap (`test/support/create-test-app.ts`) just instantiate `AppModule`, so they can never drift out of sync with each other.
-- **Every success response** is wrapped `{ data, meta: { timestamp, correlationId } }`; **every error** — validation failures, upstream errors, unhandled exceptions — is normalized to `{ statusCode, message, error, path, timestamp, correlationId }` by a single `AllExceptionsFilter`.
-- Full rationale and phase-by-phase decisions are logged in `PROGRESS.md` as they were made — it's the fuller design record behind the summary above.
-
-## Project setup
+## Quick start
 
 ```bash
-$ npm install
+nvm use
+npm install
+npm run start:dev
 ```
 
-## Compile and run the project
+Open <http://localhost:3000/docs>.
 
-```bash
-# development
-$ npm run start
+## Repository map
 
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
-```
-
-## Run tests
-
-```bash
-# unit tests
-$ npm run test
-
-# e2e tests (nocked upstream — never touches the real network)
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
-
-# contract tests — opt-in, hits the real jsonplaceholder.typicode.com to
-# catch upstream drift that the nock-based e2e fixtures can't
-$ npm run test:contract
-```
-
-## Deployment
-
-### Docker
-
-```bash
-# build the image (multi-stage — see Dockerfile)
-$ docker build -t json-placeholder-api:local .
-
-# or via compose, which also reads .env.example for local config
-$ docker compose up --build
-```
-
-The image runs as non-root `node`, forwards `SIGTERM` via `dumb-init` so
-`app.enableShutdownHooks()` (`src/app.module.ts`) actually fires, and exposes
-`GET /health/live` as its `HEALTHCHECK`.
-
-### Kubernetes (local, via k3d)
-
-Manifests live under `k8s/`: `base/` has the Deployment, Service, Ingress,
-ConfigMap, HPA, and PodDisruptionBudget; `overlays/local/` and
-`overlays/prod/` patch them per environment with Kustomize. Only `local` has
-been applied against a real cluster — `prod` is written to the same shape
-but points at placeholder registry/host values until a real cluster exists.
-
-The loop, build → import → apply → curl:
-
-```bash
-# 1. spin up a k3d cluster with an attached local registry
-$ ./k8s/k3d/create-cluster.sh
-
-# 2. build and push the image to that registry (published on localhost:5000)
-$ docker build -t localhost:5000/json-placeholder-api:local .
-$ docker push localhost:5000/json-placeholder-api:local
-
-# 3. apply the local overlay (1 replica, dev logging, Traefik ingress)
-$ kubectl apply -k k8s/overlays/local
-$ kubectl rollout status deployment/json-placeholder-api
-
-# 4. hit it through Traefik — no /etc/hosts edit needed, just set Host
-$ curl -H 'Host: api.localhost' http://localhost:8080/posts/1
-$ curl -H 'Host: api.localhost' http://localhost:8080/docs
-
-# tear down
-$ ./k8s/k3d/delete-cluster.sh
-```
-
-Two things worth knowing if you poke at this further:
-
-- **The image ref inside the cluster is not `localhost:5000/...`.** The host
-  can reach the registry at `localhost:5000` because k3d publishes that
-  port, but the node's containerd only has a registry mirror configured for
-  `k3d-jsonplaceholder-registry:5000` (see `k8s/k3d/create-cluster.sh`'s
-  `--registry-use`) — that's what `overlays/local`'s `images:` transformer
-  rewrites the tag to. Pushing to `localhost:5000` and deploying
-  `k3d-jsonplaceholder-registry:5000/...` is the same image; they're just
-  two different hostnames for the same registry container, seen from two
-  different network namespaces.
-- **`livenessProbe` → `/health/live`, `readinessProbe` → `/health/ready`**
-  (`k8s/base/deployment.yaml`), matching the split from the Docker phase —
-  liveness never depends on the upstream, so a bad JSONPlaceholder day
-  doesn't trigger a restart loop.
-
-### CI/CD (Harness)
-
-Pipeline-as-code lives under `.harness/`: a CI pipeline (lint, typecheck,
-unit, and e2e tests, then build/push the image and promote its tag into
-`k8s/overlays/local`), and a CD pipeline (roll out to the local k3d cluster
-from Phase 6, smoke-test it, then gate a prod rollout behind a manual
-approval). See `.harness/README.md` for the setup checklist — a Harness
-account, a Delegate installed into k3d, and a handful of connectors are
-required before any of it runs, none of which this repo can provide for you.
-
-### Observability
-
-The app emits OpenTelemetry traces, metrics, and (via
-[nestjs-pino](https://github.com/iamolegga/nestjs-pino)) structured JSON
-logs — vendor-neutral, so any OTLP-speaking backend works. `src/instrumentation.ts`
-does the actual instrumentation; it has to be loaded with `node --import`
-*before* Nest (and therefore Axios/`http`) is required, or OTel's
-auto-instrumentation patches miss their target. `npm run start:prod` and the
-Dockerfile's `CMD` both wire this up already; `npm run start`/`start:dev`
-don't (see the file's own header comment for why that's a deliberate scope
-cut, not an oversight).
-
-**Trace/log correlation:** the response envelope's `correlationId`
-(`src/common/hooks/correlation-id.hook.ts`) is the active span's OTel trace
-id whenever one exists, and every pino log line gets `trace_id`/`span_id`
-fields automatically (via `@opentelemetry/instrumentation-pino`) — so a
-response, its access-log line, and its trace all carry the same identifier
-without any manual plumbing. A client-supplied `x-correlation-id` header is
-still echoed back as-is (existing contract), so the two can legitimately
-diverge in that one case.
-
-**Custom metrics**, on top of what auto-instrumentation gives you for free
-(request rate/latency/error-rate, per route and status code):
-
-| Metric | What it means |
-|---|---|
-| `http_cache_lookups_total{result="hit\|miss"}` | `HttpCacheInterceptor` lookups |
-| `upstream_retries_total` | Retries `UpstreamService` issued against JSONPlaceholder |
-| `throttle_rejections_total` | Requests `ThrottlerGuard` rejected with 429 |
-
-**Local backend** — [`grafana/otel-lgtm`](https://github.com/grafana/docker-otel-lgtm),
-one container bundling Grafana + Tempo (traces) + Prometheus (metrics) +
-Loki (logs), wired together already:
-
-```bash
-$ docker compose up --build
-# Grafana: http://localhost:3001 (admin/admin) — Explore → Tempo/Prometheus/Loki
-```
-
-**In k3d**, the same image is deployed by `overlays/local` alongside the app
-(`k8s/overlays/local/otel.yaml`), with `OTEL_EXPORTER_OTLP_ENDPOINT` patched
-to point at it in-cluster:
-
-```bash
-$ kubectl apply -k k8s/overlays/local
-$ kubectl port-forward svc/otel-lgtm 3001:3000
-# Grafana: http://localhost:3001
-```
-
-**Not done, and why:** PLAN.md's Phase 8 also lists a Dynatrace trial (needs
-a real account signup this repo can't do for you — evaluate it by pointing
-`OTEL_EXPORTER_OTLP_ENDPOINT` at it once you have one; nothing else changes)
-and feeding these metrics into Harness's Continuous Verification (needs the
-real Harness tenant Phase 7 is still waiting on). Both are one-account away,
-not one-PR away.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+| Path | Contents | Docs |
+| --- | --- | --- |
+| `package.json`, `.env.example` | Scripts, configuration | [Getting started](docs/README-getting-started.md) |
+| `src/` | Application code | [Architecture](docs/README-architecture.md) |
+| `test/` | e2e and contract tests, test helpers | [Testing](docs/README-testing.md) |
+| `eslint.config.mjs`, `tsconfig.json` | Lint, format and compiler rules | [Code quality](docs/README-code-quality.md) |
+| `Dockerfile`, `docker-compose.yml`, `k8s/` | Image, local stack, Kustomize manifests | [Docker & Kubernetes](docs/README-docker-k8s.md) |
+| `.harness/` | CI/CD pipelines | [Harness](docs/README-harness.md) |
+| `src/instrumentation.ts` | OpenTelemetry setup | [Telemetry](docs/README-telemetry.md) |

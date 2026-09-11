@@ -10,7 +10,7 @@ coverage
 .idea
 
 # env — never bake these into an image; pass config at `docker run`/compose
-# time instead (see README's "env via --env-file" note)
+# time instead (see docs/README-docker-k8s.md)
 .env
 .env.*
 
@@ -19,6 +19,7 @@ test
 
 # docs — irrelevant to the runtime image
 *.md
+docs
 .claude
 
 # misc

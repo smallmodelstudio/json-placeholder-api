@@ -40,5 +40,5 @@ pipeline:
                     # Hits the real jsonplaceholder.typicode.com — deliberately
                     # run on a schedule (see triggers/contract-tests-cron.yaml)
                     # rather than as a PR gate, so upstream flakiness never
-                    # blocks a merge (PLAN.md Phase 7's "optional" item).
+                    # blocks a merge.
                     command: npm run test:contract

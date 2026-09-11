@@ -45,7 +45,7 @@ export class HealthController {
   })
   // No indicators: liveness must never fail because of upstream trouble, or
   // Kubernetes would restart every pod in a loop for a fault none of them
-  // can fix (see PLAN.md Phase 5).
+  // can fix.
   live(): Promise<HealthCheckResult> {
     return this.health.check([]);
   }

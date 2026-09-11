@@ -33,19 +33,18 @@ pipeline:
                   spec:
                     shell: Bash
                     onDelegate: true
-                    # Deliberately just a smoke test, not "Harness native
-                    # health gating" in the fuller sense PLAN.md's Phase 7
-                    # points at — that wants real metrics to gate on, which
-                    # don't exist until Phase 8's OTel work lands. This is
-                    # the honest interim version: the same curls Phase 6
-                    # verified by hand, now automated and blocking rollout.
+                    # Deliberately just a smoke test, not Harness's
+                    # metrics-based Continuous Verification — that needs a
+                    # real tenant wired to a metrics backend. These are the
+                    # same curls the local k3d loop uses by hand, automated
+                    # and blocking rollout.
                     #
                     # Hits the in-cluster Service directly, not the
-                    # host-mapped Traefik port (localhost:8080) Phase 6's
-                    # README uses — this script runs on the Delegate, which
-                    # is itself a pod inside the k3d cluster (see
-                    # .harness/README.md), so it shares the cluster network
-                    # and localhost:8080 wouldn't resolve to anything.
+                    # host-mapped Traefik port (localhost:8080) — this
+                    # script runs on the Delegate, which is itself a pod
+                    # inside the k3d cluster (see docs/README-harness.md),
+                    # so it shares the cluster network and localhost:8080
+                    # wouldn't resolve to anything.
                     source:
                       type: Inline
                       spec:

@@ -1,7 +1,6 @@
 # Local-only: the same grafana/otel-lgtm all-in-one image docker-compose.yml
-# uses, deployed into k3d so PLAN.md's Phase 8 ask ("deploy the collector
-# into k3d; scrape from the cluster") has something real to scrape from
-# in-cluster pods, not just the docker-compose loop. Deliberately lives in
+# uses, deployed into k3d so in-cluster pods have a collector to export to,
+# not just the docker-compose loop. Deliberately lives in
 # overlays/local rather than k8s/base — there's no equivalent backend for
 # overlays/prod yet (see configmap.yaml's OTEL_EXPORTER_OTLP_ENDPOINT
 # comment), so it isn't shared kustomization.

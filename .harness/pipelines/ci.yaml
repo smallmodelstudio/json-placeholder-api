@@ -19,8 +19,8 @@ pipeline:
           platform:
             os: Linux
             arch: Amd64
-          # Cloud runner keeps this inside the free 2,000 credits/month tier
-          # (PLAN.md Phase 7). Swap to a self-hosted runner connector once
+          # Cloud runner keeps this inside the free 2,000 credits/month tier.
+          # Swap to a self-hosted runner connector once
           # that budget is a real constraint — the steps below don't change.
           runtime:
             type: Cloud
@@ -35,9 +35,9 @@ pipeline:
                     shell: Sh
                     command: npm ci
 
-              # Mirrors the three independent checks Phase 1/2 already gate
-              # local work on (npm run lint / typecheck / test) — run in
-              # parallel since none of them depend on each other's output.
+              # Mirrors the three independent checks that gate local work
+              # (npm run lint / typecheck / test) — run in parallel since
+              # none of them depend on each other's output.
               - parallel:
                   - step:
                       type: Run
@@ -67,7 +67,7 @@ pipeline:
                   identifier: e2e_tests
                   spec:
                     shell: Sh
-                    # Nock-mocked (test/README.md) — never touches the real
+                    # Nock-mocked (docs/README-testing.md) — never touches the real
                     # network, so this is safe to run on every PR. Contract
                     # tests hit the real upstream and are deliberately kept
                     # out of this pipeline; see contract-tests.yaml.
@@ -99,7 +99,7 @@ pipeline:
                     # substituting an artifact into the Kustomize manifest at
                     # deploy time. Chosen over Harness's manifest/artifact
                     # coupling for Kustomize because that path is unverified
-                    # against a real tenant (see .harness/README.md) — this
+                    # against a real tenant (see docs/README-harness.md) — this
                     # way CD only ever applies exactly what's committed.
                     command: |
                       set -euo pipefail
