@@ -49,11 +49,16 @@ export class PostsController {
     return this.postsService.create(dto);
   }
 
+  // PUT is a full replace, so — unlike PATCH below — it requires every
+  // field CreatePostDto requires, not just the ones being changed.
+  // Accepting UpdatePostDto's PartialType here would let a partial body
+  // through PUT, silently leaving the upstream's other fields untouched
+  // instead of replacing the resource as PUT's semantics promise.
   @Put(':id')
   @ApiEnvelopedResponse(Post)
   update(
     @Param('id', ParsePositiveIntPipe) id: number,
-    @Body() dto: UpdatePostDto,
+    @Body() dto: CreatePostDto,
   ): Promise<Post> {
     return this.postsService.update(id, dto);
   }

@@ -90,6 +90,13 @@ describe('Albums (e2e)', () => {
       const body = response.body as SuccessEnvelope<Album>;
       expect(body.data).toEqual(updated);
     });
+
+    it('rejects a partial body with 400 (PUT replaces, it does not merge)', async () => {
+      await api(app)
+        .put('/albums/1')
+        .send({ title: 'only a title' })
+        .expect(400);
+    });
   });
 
   describe('PATCH /albums/:id', () => {

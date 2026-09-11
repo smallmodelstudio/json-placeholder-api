@@ -31,7 +31,8 @@ export class UsersService {
     return this.upstream.post<User>('/users', dto);
   }
 
-  update(id: number, dto: UpdateUserDto): Promise<User> {
+  // PUT is a full replace — see UsersController.update()'s comment.
+  update(id: number, dto: CreateUserDto): Promise<User> {
     return this.upstream.put<User>(`/users/${id}`, dto);
   }
 

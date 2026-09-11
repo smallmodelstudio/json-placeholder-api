@@ -134,7 +134,14 @@ describe('CommentsService', () => {
       const error = new Error('upstream failure');
       upstream.put.mockRejectedValueOnce(error);
 
-      await expect(service.update(1, {})).rejects.toThrow(error);
+      await expect(
+        service.update(1, {
+          postId: 1,
+          name: 'n',
+          email: 'e@example.com',
+          body: 'b',
+        }),
+      ).rejects.toThrow(error);
     });
   });
 

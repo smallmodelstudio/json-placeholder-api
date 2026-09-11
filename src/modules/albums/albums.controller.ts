@@ -45,11 +45,13 @@ export class AlbumsController {
     return this.albumsService.create(dto);
   }
 
+  // PUT is a full replace — see PostsController.update()'s comment for why
+  // PATCH below uses a different (partial) DTO.
   @Put(':id')
   @ApiEnvelopedResponse(Album)
   update(
     @Param('id', ParsePositiveIntPipe) id: number,
-    @Body() dto: UpdateAlbumDto,
+    @Body() dto: CreateAlbumDto,
   ): Promise<Album> {
     return this.albumsService.update(id, dto);
   }

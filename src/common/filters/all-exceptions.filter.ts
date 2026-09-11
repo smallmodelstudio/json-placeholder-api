@@ -123,14 +123,32 @@ export class AllExceptionsFilter implements ExceptionFilter {
       return { statusCode, message: body, error: exception.name };
     }
 
-    const { message, error } = body as {
-      message?: string | string[];
-      error?: string;
-    };
+    // Most HttpExceptions carry a `{ message, error }` body (Nest's own
+    // built-in exceptions, and everything this app throws directly). But
+    // that's a convention, not something `HttpException` enforces — e.g.
+    // Terminus's HealthCheckService throws a ServiceUnavailableException
+    // whose body is the whole HealthCheckResult object, with its own
+    // unrelated `error` key (failed checks, not an HTTP error name).
+    // Passing that straight through would put a HealthCheckResult where
+    // clients expect a string, breaking the one envelope shape this API
+    // promises for every error. Falling back to the exception's own
+    // message/name below keeps the envelope honest for any exception body
+    // shape, not just the ones this codebase happens to throw today.
+    const { message, error } = body as { message?: unknown; error?: unknown };
     return {
       statusCode,
-      message: message ?? exception.message,
-      error: error ?? exception.name,
+      message: this.isMessage(message) ? message : exception.message,
+      error:
+        typeof error === 'string'
+          ? error
+          : (STATUS_CODES[statusCode] ?? exception.name),
     };
+  }
+
+  private isMessage(value: unknown): value is string | string[] {
+    return (
+      typeof value === 'string' ||
+      (Array.isArray(value) && value.every((item) => typeof item === 'string'))
+    );
   }
 }

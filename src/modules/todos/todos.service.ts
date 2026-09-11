@@ -23,7 +23,8 @@ export class TodosService {
     return this.upstream.post<Todo>('/todos', dto);
   }
 
-  update(id: number, dto: UpdateTodoDto): Promise<Todo> {
+  // PUT is a full replace — see PostsController.update()'s comment.
+  update(id: number, dto: CreateTodoDto): Promise<Todo> {
     return this.upstream.put<Todo>(`/todos/${id}`, dto);
   }
 

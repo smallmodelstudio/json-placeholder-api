@@ -150,7 +150,14 @@ describe('PhotosService', () => {
       const error = new Error('upstream failure');
       upstream.put.mockRejectedValueOnce(error);
 
-      await expect(service.update(1, {})).rejects.toThrow(error);
+      await expect(
+        service.update(1, {
+          albumId: 1,
+          title: 't',
+          url: 'https://x/1',
+          thumbnailUrl: 'https://x/1t',
+        }),
+      ).rejects.toThrow(error);
     });
   });
 

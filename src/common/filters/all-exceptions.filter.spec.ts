@@ -13,6 +13,7 @@ import {
   BadRequestException,
   Logger,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { ThrottlerException } from '@nestjs/throttler';
 import {
@@ -126,6 +127,29 @@ describe('AllExceptionsFilter', () => {
         statusCode: 400,
         message: ['userId must be a positive number'],
         error: 'Bad Request',
+      }),
+    );
+  });
+
+  it('falls back to the exception message/status text when the body has no string message/error (e.g. Terminus)', () => {
+    // Terminus's HealthCheckService throws exactly this shape: the whole
+    // HealthCheckResult as the exception body, with its own unrelated
+    // `error` object (failed checks) rather than an HTTP error name string.
+    const exception = new ServiceUnavailableException({
+      status: 'error',
+      info: {},
+      error: { upstream: { status: 'down' } },
+      details: {},
+    });
+
+    filter.catch(exception, host);
+
+    expect(statusMock).toHaveBeenCalledWith(503);
+    expect(sendMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        statusCode: 503,
+        message: 'Service Unavailable Exception',
+        error: 'Service Unavailable',
       }),
     );
   });

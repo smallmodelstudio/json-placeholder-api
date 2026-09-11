@@ -44,11 +44,13 @@ export class PhotosController {
     return this.photosService.create(dto);
   }
 
+  // PUT is a full replace — see PostsController.update()'s comment for why
+  // PATCH below uses a different (partial) DTO.
   @Put(':id')
   @ApiEnvelopedResponse(Photo)
   update(
     @Param('id', ParsePositiveIntPipe) id: number,
-    @Body() dto: UpdatePhotoDto,
+    @Body() dto: CreatePhotoDto,
   ): Promise<Photo> {
     return this.photosService.update(id, dto);
   }

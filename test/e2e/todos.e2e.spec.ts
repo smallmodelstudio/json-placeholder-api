@@ -89,6 +89,13 @@ describe('Todos (e2e)', () => {
       const body = response.body as SuccessEnvelope<Todo>;
       expect(body.data).toEqual(updated);
     });
+
+    it('rejects a partial body with 400 (PUT replaces, it does not merge)', async () => {
+      await api(app)
+        .put('/todos/1')
+        .send({ title: 'only a title' })
+        .expect(400);
+    });
   });
 
   describe('PATCH /todos/:id', () => {

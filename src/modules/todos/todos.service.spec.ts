@@ -123,7 +123,9 @@ describe('TodosService', () => {
       const error = new Error('upstream failure');
       upstream.put.mockRejectedValueOnce(error);
 
-      await expect(service.update(1, {})).rejects.toThrow(error);
+      await expect(
+        service.update(1, { userId: 1, title: 't', completed: true }),
+      ).rejects.toThrow(error);
     });
   });
 

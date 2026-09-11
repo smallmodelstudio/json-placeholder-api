@@ -1,4 +1,4 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiResponse, ApiTags, SchemaObject } from '@nestjs/swagger';
 import {
@@ -9,7 +9,10 @@ import {
 } from '@nestjs/terminus';
 import { SkipThrottle } from '@nestjs/throttler';
 import { AppConfig } from '../config/config.types';
-import { envelopeSchema } from '../common/decorators/api-envelope-response.decorator';
+import {
+  envelopeSchema,
+  errorEnvelopeSchema,
+} from '../common/decorators/api-envelope-response.decorator';
 
 const healthResultSchema: SchemaObject = {
   type: 'object',
@@ -57,17 +60,42 @@ export class HealthController {
     description: 'The upstream is reachable.',
     schema: envelopeSchema(healthResultSchema),
   })
+  // Not a { data, meta } envelope like every other response, success or
+  // failure: HealthCheckService.check() *throws* a ServiceUnavailableException
+  // (with the HealthCheckResult as its body) rather than resolving one, so
+  // this goes through AllExceptionsFilter and out as the same error envelope
+  // every other failure uses.
   @ApiResponse({
     status: 503,
     description: 'The upstream is unreachable.',
-    schema: envelopeSchema(healthResultSchema),
+    schema: errorEnvelopeSchema,
   })
-  ready(): Promise<HealthCheckResult> {
+  async ready(): Promise<HealthCheckResult> {
     const baseUrl = this.configService.get('http.baseUrl', { infer: true });
-    // /posts/1 is a small, always-present resource — a reasonable stand-in
-    // for a dedicated health/ping endpoint, which JSONPlaceholder lacks.
-    return this.health.check([
-      () => this.http.pingCheck('upstream', `${baseUrl}/posts/1`),
-    ]);
+    try {
+      // /posts/1 is a small, always-present resource — a reasonable
+      // stand-in for a dedicated health/ping endpoint, which
+      // JSONPlaceholder lacks.
+      return await this.health.check([
+        () => this.http.pingCheck('upstream', `${baseUrl}/posts/1`),
+      ]);
+    } catch (error) {
+      // HealthCheckService's own exception carries the whole
+      // HealthCheckResult as its body, not a string message — left as-is,
+      // it would reach AllExceptionsFilter's generic fallback and produce
+      // a vague "Service Unavailable Exception". Naming the failed check
+      // here instead makes the error envelope's `message` actually say
+      // what's wrong.
+      if (error instanceof ServiceUnavailableException) {
+        const result = error.getResponse() as HealthCheckResult;
+        const failedChecks = Object.keys(result.error ?? {});
+        throw new ServiceUnavailableException(
+          failedChecks.length > 0
+            ? `Health check failed: ${failedChecks.join(', ')}`
+            : 'Health check failed',
+        );
+      }
+      throw error;
+    }
   }
 }

@@ -18,14 +18,23 @@ describe('ParsePositiveIntPipe', () => {
     expect(pipe.transform('42', metadata)).toBe(42);
   });
 
-  it.each(['0', '-1', '1.5', 'abc', '', ' '])(
-    'rejects %p as not a positive integer',
-    (value) => {
-      expect(() => pipe.transform(value, metadata)).toThrow(
-        BadRequestException,
-      );
-    },
-  );
+  it.each([
+    '0',
+    '-1',
+    '1.5',
+    'abc',
+    '',
+    ' ',
+    '0x1', // hex — Number('0x1') === 1
+    '1e2', // exponential — Number('1e2') === 100
+    '+1', // explicit sign
+    '01', // leading zero
+    ' 1', // leading whitespace — Number(' 1') === 1
+    '1 ', // trailing whitespace
+    'Infinity',
+  ])('rejects %p as not a positive integer', (value) => {
+    expect(() => pipe.transform(value, metadata)).toThrow(BadRequestException);
+  });
 
   it('includes the param name in the error message', () => {
     expect(() => pipe.transform('abc', metadata)).toThrow('id');

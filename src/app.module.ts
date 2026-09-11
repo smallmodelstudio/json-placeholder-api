@@ -22,7 +22,7 @@ import { AlbumsModule } from './modules/albums/albums.module';
 import { PhotosModule } from './modules/photos/photos.module';
 import { HealthModule } from './health/health.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
-import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
+import { StrictNumberFormatPipe } from './common/pipes/strict-number-format.pipe';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { HttpCacheInterceptor } from './common/interceptors/http-cache.interceptor';
 import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
@@ -87,6 +87,30 @@ function isPinoPrettyAvailable(): boolean {
             // trace_id/span_id correlation is added automatically by
             // @opentelemetry/instrumentation-pino (see instrumentation.ts)
             // whenever a span is active — no manual mixin needed here.
+            //
+            // This one access-log line per request (method, url, status,
+            // duration) is now the only per-request log line for anything
+            // that isn't a 5xx — there used to be a second, near-identical
+            // one from a hand-rolled LoggingInterceptor. That interceptor
+            // couldn't cover requests that never reach a matched route
+            // (an unknown path, a body Fastify itself rejects) anyway,
+            // since interceptors only run once a route has matched; this
+            // hook-based logger, registered for every request the same way
+            // as registerCorrelationIdHook, does. AllExceptionsFilter still
+            // logs 5xx responses separately, with the stack trace this
+            // access log doesn't carry.
+            customLogLevel: (_req, res, err) =>
+              err || res.statusCode >= 500
+                ? 'error'
+                : res.statusCode >= 400
+                  ? 'warn'
+                  : 'info',
+            // registerCorrelationIdHook stashes the id on the raw
+            // IncomingMessage as well as on the FastifyRequest wrapper,
+            // specifically so this can read it back — keeping this access
+            // log line tied to the same id as the response envelope and
+            // every other log line for the request.
+            customProps: (req) => ({ correlationId: req.correlationId }),
           },
         };
       },
@@ -119,6 +143,13 @@ function isPinoPrettyAvailable(): boolean {
   ],
   controllers: [],
   providers: [
+    // Multiple APP_PIPE providers run in this array's order (same
+    // reasoning as the APP_INTERCEPTOR ordering comment below), and that
+    // order matters here: StrictNumberFormatPipe has to see a route's raw
+    // param/query string before ValidationPipe's own `+value` coercion
+    // quietly turns "0x1" or "1e2" into a valid-looking number — see its
+    // own doc comment for why.
+    { provide: APP_PIPE, useClass: StrictNumberFormatPipe },
     {
       provide: APP_PIPE,
       useValue: new ValidationPipe({
@@ -130,20 +161,21 @@ function isPinoPrettyAvailable(): boolean {
     },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
-    // Bound outermost to innermost: Logging wraps the whole request (needs
-    // total duration); Transform must see the raw handler result before it's
-    // enveloped, whether that result came from the handler or the cache, so
-    // every response — cache hits included — gets a fresh timestamp and
-    // correlation id; Cache sits next so a hit short-circuits everything
-    // inside it (Timeout, the real handler, the upstream call); Timeout sits
-    // closest to the handler so it only ever races real work.
+    // Bound outermost to innermost: Transform must see the raw handler
+    // result before it's enveloped, whether that result came from the
+    // handler or the cache, so every response — cache hits included — gets
+    // a fresh timestamp and correlation id; Cache sits next so a hit
+    // short-circuits everything inside it (Timeout, the real handler, the
+    // upstream call); Timeout sits closest to the handler so it only ever
+    // races real work.
     //
-    // `request.correlationId`, which Logging/Transform/AllExceptionsFilter
-    // all read, is set upstream of all of this by a Fastify `onRequest`
-    // hook (see registerCorrelationIdHook) rather than by an interceptor —
+    // `request.correlationId`, which Transform/AllExceptionsFilter both
+    // read, is set upstream of all of this by a Fastify `onRequest` hook
+    // (see registerCorrelationIdHook) rather than by an interceptor —
     // interceptors only run once a route has matched, which would leave
-    // unmatched-route 404s without a correlation id.
-    { provide: APP_INTERCEPTOR, useClass: LoggingInterceptor },
+    // unmatched-route 404s without a correlation id. Per-request access
+    // logging (method, url, status, duration) is pino-http's job, not an
+    // interceptor's, for the same reason — see the pinoHttp config above.
     { provide: APP_INTERCEPTOR, useClass: TransformInterceptor },
     { provide: APP_INTERCEPTOR, useClass: HttpCacheInterceptor },
     { provide: APP_INTERCEPTOR, useClass: TimeoutInterceptor },

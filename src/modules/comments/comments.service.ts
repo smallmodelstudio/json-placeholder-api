@@ -23,7 +23,8 @@ export class CommentsService {
     return this.upstream.post<Comment>('/comments', dto);
   }
 
-  update(id: number, dto: UpdateCommentDto): Promise<Comment> {
+  // PUT is a full replace — see PostsController.update()'s comment.
+  update(id: number, dto: CreateCommentDto): Promise<Comment> {
     return this.upstream.put<Comment>(`/comments/${id}`, dto);
   }
 

@@ -1,11 +1,8 @@
 import { INestApplication } from '@nestjs/common';
-import {
-  FastifyAdapter,
-  NestFastifyApplication,
-} from '@nestjs/platform-fastify';
+import { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { Test, TestingModule, TestingModuleBuilder } from '@nestjs/testing';
 import { AppModule } from '../../src/app.module';
-import { registerCorrelationIdHook } from '../../src/common/hooks/correlation-id.hook';
+import { configureApp, createFastifyAdapter } from '../../src/bootstrap';
 
 export interface CreateTestAppOptions {
   /**
@@ -30,9 +27,11 @@ export async function createTestApp(
   const moduleFixture: TestingModule = await builder.compile();
 
   const app = moduleFixture.createNestApplication<NestFastifyApplication>(
-    new FastifyAdapter(),
+    // createFastifyAdapter() mirrors main.ts, so a test can exercise the
+    // TRUST_PROXY behaviour via withEnvOverrides (see throttle.e2e.spec.ts).
+    createFastifyAdapter(),
   );
-  registerCorrelationIdHook(app.getHttpAdapter().getInstance());
+  configureApp(app);
   await app.init();
   // Fastify's underlying server isn't routable until it has finished its own
   // async boot — supertest hitting getHttpServer() before this resolves

@@ -7,6 +7,7 @@ How a request moves through the NestJS app, and where each concern lives.
 ```text
 src/
   main.ts                 bootstrap: Fastify adapter, pino logger, Swagger, listen
+  bootstrap.ts            shared between main.ts and test/support/create-test-app.ts
   app.module.ts           root module; registers every global pipe, guard, interceptor, filter
   instrumentation.ts      OpenTelemetry SDK, loaded before the app (see Telemetry)
   config/                 env → typed AppConfig, plus startup validation
@@ -18,7 +19,7 @@ src/
     <resource>.service.ts
   common/
     hooks/                Fastify onRequest hook that sets the correlation ID
-    interceptors/         logging, envelope, cache, timeout
+    interceptors/         envelope, cache, timeout
     filters/              AllExceptionsFilter: the error envelope
     pipes/                ParsePositiveIntPipe for :id params
     decorators/           Swagger decorators for the response envelope
@@ -33,8 +34,8 @@ Unit specs sit next to the file they test (`*.spec.ts`).
 
 ```text
 onRequest hook          set correlationId; echo it in x-correlation-id
+pino-http               access log: method, URL, status, duration, correlationId
 ThrottlerGuard          429 when the client IP is over its limit
-LoggingInterceptor      log method, URL and duration
 TransformInterceptor    wrap the handler's result in { data, meta }
 HttpCacheInterceptor    serve cached GETs; a hit skips everything below
 TimeoutInterceptor      504 if the request outlives its budget
@@ -52,29 +53,48 @@ Interceptors wrap each other in the order they're registered, with the first
 registered outermost. That order is deliberate: `Transform` sits outside `Cache`,
 so a cached response still gets a fresh `timestamp` and `correlationId`.
 
+Per-request access logging is pino-http's job (the `pinoHttp` option on
+`LoggerModule.forRootAsync` in `app.module.ts`), not an interceptor's — it's
+the only thing that fires for every request, matched route or not, the same
+reason `registerCorrelationIdHook` is a Fastify hook rather than an
+interceptor. `customLogLevel` there mirrors an error response's severity
+(info/warn/error by status code) and `customProps` tags each line with the
+same `correlationId` as the response envelope. `AllExceptionsFilter` logs a
+5xx a second time, with the stack trace the access log line doesn't carry.
+
 ## Response shapes
 
 Success:
 
 ```json
-{ "data": { "id": 1, "title": "…" }, "meta": { "timestamp": "…", "correlationId": "…" } }
+{
+  "data": { "id": 1, "title": "…" },
+  "meta": { "timestamp": "…", "correlationId": "…" }
+}
 ```
 
 Error:
 
 ```json
-{ "statusCode": 404, "message": "…", "error": "Not Found", "path": "/posts/999", "timestamp": "…", "correlationId": "…" }
+{
+  "statusCode": 404,
+  "message": "…",
+  "error": "Not Found",
+  "path": "/posts/999",
+  "timestamp": "…",
+  "correlationId": "…"
+}
 ```
 
 How `AllExceptionsFilter` maps each kind of error:
 
-| Cause | Status |
-| --- | --- |
-| `HttpException`, e.g. a validation failure | Its own status |
-| Upstream timeout | 504 |
-| Upstream 4xx | Passed through unchanged |
-| Upstream 5xx, or no response | 502 |
-| Anything else | 500 |
+| Cause                                      | Status                   |
+| ------------------------------------------ | ------------------------ |
+| `HttpException`, e.g. a validation failure | Its own status           |
+| Upstream timeout                           | 504                      |
+| Upstream 4xx                               | Passed through unchanged |
+| Upstream 5xx, or no response               | 502                      |
+| Anything else                              | 500                      |
 
 ## Modules
 
@@ -86,29 +106,34 @@ base class.
 - **Nested routes** (`/posts/:id/comments`, `/users/:id/posts`) belong to the
   parent's controller, which delegates to the child's service.
 - **`UpstreamService`** retries on 5xx and network errors with exponential backoff
-  (100 ms, 200 ms, …). It never retries a 4xx. It turns axios errors into
-  `UpstreamException`, which the filter then maps to an HTTP status.
+  (100 ms, 200 ms, …). It never retries a 4xx, and never retries a non-idempotent
+  method (POST, PATCH) — doing so risks a duplicate write if the first attempt
+  actually reached upstream but its response didn't reach us. It turns axios
+  errors into `UpstreamException`, which the filter then maps to an HTTP status.
 
 ## Cross-cutting concerns
 
-| Concern | Behaviour | Where |
-| --- | --- | --- |
-| Validation | Unknown properties or query params return 400 | `ValidationPipe` in `app.module.ts` |
-| Caching | GETs cached by URL for `CACHE_TTL_MS`; `@CacheTTL()` overrides per route; `X-Cache: HIT` or `MISS` header; `/health/*` never cached | `http-cache.interceptor.ts` |
-| Rate limiting | `THROTTLE_LIMIT` requests per `THROTTLE_TTL_MS` per IP; `/health/*` exempt via `@SkipThrottle()` | `ThrottlerGuard` |
-| Timeouts | axios aborts each upstream attempt after `UPSTREAM_TIMEOUT_MS`; `TimeoutInterceptor` caps the whole request at `UPSTREAM_TIMEOUT_MS × (UPSTREAM_MAX_RETRIES + 2)` | `upstream.module.ts`, `timeout.interceptor.ts` |
-| Health | `/health/live` checks nothing, so it only fails if the process is down; `/health/ready` pings the upstream and returns 503 if it's unreachable | `health.controller.ts` |
-| Config | `configuration.ts` maps env vars to `AppConfig`; read them with `ConfigService<AppConfig, true>` and `{ infer: true }` | `src/config/` |
-| API docs | The Swagger CLI plugin generates schemas from DTO types; `@ApiEnvelopedResponse()` documents the envelope | `nest-cli.json`, `common/decorators/` |
+| Concern       | Behaviour                                                                                                                                                                                          | Where                                          |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| Validation    | Unknown properties or query params return 400                                                                                                                                                      | `ValidationPipe` in `app.module.ts`            |
+| Caching       | GETs cached by URL for `CACHE_TTL_MS`; `@CacheTTL()` overrides per route; `X-Cache: HIT` or `MISS` header; `/health/*` never cached                                                                | `http-cache.interceptor.ts`                    |
+| Rate limiting | `THROTTLE_LIMIT` requests per `THROTTLE_TTL_MS` per IP (the real client IP only if `TRUST_PROXY=true`, see [Getting started](README-getting-started.md)); `/health/*` exempt via `@SkipThrottle()` | `ThrottlerGuard`                               |
+| Timeouts      | axios aborts each upstream attempt after `UPSTREAM_TIMEOUT_MS`; `TimeoutInterceptor` caps the whole request at `UPSTREAM_TIMEOUT_MS × (UPSTREAM_MAX_RETRIES + 2)`                                  | `upstream.module.ts`, `timeout.interceptor.ts` |
+| Health        | `/health/live` checks nothing, so it only fails if the process is down; `/health/ready` pings the upstream and returns 503 if it's unreachable                                                     | `health.controller.ts`                         |
+| Config        | `configuration.ts` maps env vars to `AppConfig`; read them with `ConfigService<AppConfig, true>` and `{ infer: true }`                                                                             | `src/config/`                                  |
+| API docs      | The Swagger CLI plugin generates schemas from DTO types; `@ApiEnvelopedResponse()` documents the envelope                                                                                          | `nest-cli.json`, `common/decorators/`          |
 
 ## Gotchas
 
 - **The correlation ID is set by a Fastify hook, not a Nest middleware or
   interceptor.** Interceptors only run once a route matches, so a 404 would have
   no ID. Under Fastify, Nest middleware receives the raw Node request, not the
-  `FastifyRequest` that everything downstream reads. Because the hook lives
-  outside Nest, it has to be registered in both `main.ts` and
-  `test/support/create-test-app.ts`.
+  `FastifyRequest` that everything downstream reads — so the id is stashed on
+  both (see `correlation-id.hook.ts`), and pino-http's access log reads its
+  copy off the raw request. Because the hook lives outside Nest, `main.ts` and
+  `test/support/create-test-app.ts` both have to call it, plus build the same
+  `FastifyAdapter`; `src/bootstrap.ts` is the shared code both call into so
+  the two can't drift apart by hand.
 - **An undeclared query param returns 400**, because of `forbidNonWhitelisted`.
   Every new query param needs a field on its DTO.
 - **Fastify's `request.url` includes the query string.** The cache interceptor

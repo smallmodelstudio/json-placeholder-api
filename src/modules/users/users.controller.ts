@@ -45,11 +45,14 @@ export class UsersController {
     return this.usersService.create(dto);
   }
 
+  // PUT is a full replace, so it requires every field CreateUserDto
+  // requires — see PostsController.update()'s comment for why PATCH below
+  // uses a different (partial) DTO.
   @Put(':id')
   @ApiEnvelopedResponse(User)
   update(
     @Param('id', ParsePositiveIntPipe) id: number,
-    @Body() dto: UpdateUserDto,
+    @Body() dto: CreateUserDto,
   ): Promise<User> {
     return this.usersService.update(id, dto);
   }

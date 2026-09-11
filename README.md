@@ -41,3 +41,4 @@ Open <http://localhost:3000/docs>.
 | `Dockerfile`, `docker-compose.yml`, `k8s/` | Image, local stack, Kustomize manifests | [Docker & Kubernetes](docs/README-docker-k8s.md) |
 | `.harness/` | CI/CD pipelines | [Harness](docs/README-harness.md) |
 | `src/instrumentation.ts` | OpenTelemetry setup | [Telemetry](docs/README-telemetry.md) |
+| Whole repo | Ongoing post-audit cleanup | [Cleanup plan](docs/README-cleanup-plan.md), [progress](docs/README-cleanup-progress.md) |

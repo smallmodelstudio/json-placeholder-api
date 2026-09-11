@@ -1,19 +1,16 @@
 import { NestFactory } from '@nestjs/core';
-import {
-  FastifyAdapter,
-  NestFastifyApplication,
-} from '@nestjs/platform-fastify';
+import { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
 import { AppModule } from './app.module';
 import { AppConfig } from './config/config.types';
-import { registerCorrelationIdHook } from './common/hooks/correlation-id.hook';
+import { configureApp, createFastifyAdapter } from './bootstrap';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter(),
+    createFastifyAdapter(),
     { bufferLogs: true },
   );
   const configService: ConfigService<AppConfig, true> = app.get(ConfigService);
@@ -26,7 +23,7 @@ async function bootstrap() {
   // too instead of leaking out through the console logger first.
   app.useLogger(app.get(Logger));
 
-  registerCorrelationIdHook(app.getHttpAdapter().getInstance());
+  configureApp(app);
   app.enableShutdownHooks();
 
   const swaggerConfig = new DocumentBuilder()

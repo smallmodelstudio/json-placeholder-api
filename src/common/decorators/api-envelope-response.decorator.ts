@@ -67,3 +67,31 @@ export const ApiEnvelopedEmptyResponse = (description?: string) =>
     ...(description !== undefined && { description }),
     schema: envelopeSchema({ type: 'object' }),
   });
+
+// The shape AllExceptionsFilter sends for every error response, success
+// envelope's opposite number. Not used on every route's Swagger docs today
+// (see docs/README-architecture.md's note on undocumented error responses)
+// — currently only HealthController's 503, whose body would otherwise be
+// undocumented since it doesn't come from throwing one of this app's own,
+// already-`{message,error}`-shaped exceptions.
+export const errorEnvelopeSchema: SchemaObject = {
+  type: 'object',
+  properties: {
+    statusCode: { type: 'number' },
+    message: {
+      oneOf: [{ type: 'string' }, { type: 'array', items: { type: 'string' } }],
+    },
+    error: { type: 'string' },
+    path: { type: 'string' },
+    timestamp: { type: 'string', format: 'date-time' },
+    correlationId: { type: 'string' },
+  },
+  required: [
+    'statusCode',
+    'message',
+    'error',
+    'path',
+    'timestamp',
+    'correlationId',
+  ],
+};

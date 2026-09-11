@@ -223,6 +223,45 @@ describe('UpstreamService', () => {
     });
   });
 
+  it('does not retry a POST on a 5xx response (retrying risks a duplicate write)', async () => {
+    const serverError = makeAxiosError({
+      response: { status: 500 } as AxiosResponse,
+    });
+    const { source, attempts } = respondWith(throwError(() => serverError));
+    httpService.request.mockReturnValueOnce(source);
+
+    await expect(
+      service.post('/posts', { title: 'hi' }),
+    ).rejects.toBeInstanceOf(UpstreamException);
+    expect(attempts).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retry a PATCH on a network error', async () => {
+    const networkError = makeAxiosError({ code: 'ECONNREFUSED' });
+    const { source, attempts } = respondWith(throwError(() => networkError));
+    httpService.request.mockReturnValueOnce(source);
+
+    await expect(
+      service.patch('/posts/1', { title: 'hi' }),
+    ).rejects.toBeInstanceOf(UpstreamException);
+    expect(attempts).toHaveBeenCalledTimes(1);
+  });
+
+  it('still retries a DELETE on a 5xx response', async () => {
+    const serverError = makeAxiosError({
+      response: { status: 503 } as AxiosResponse,
+    });
+    const { source, attempts } = respondWith(
+      throwError(() => serverError),
+      of(makeAxiosResponse({})),
+    );
+    httpService.request.mockReturnValueOnce(source);
+
+    await service.delete('/posts/1');
+
+    expect(attempts).toHaveBeenCalledTimes(2);
+  });
+
   it('maps a non-axios error to NETWORK_ERROR', async () => {
     httpService.request.mockReturnValueOnce(
       throwError(() => new Error('boom')),
