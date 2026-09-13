@@ -23,6 +23,12 @@
     "test:contract": "RUN_CONTRACT_TESTS=1 vitest run --project contract",
     "test:all": "vitest run"
   },
+  "overrides": {
+    "@nestjs/throttler": {
+      "@nestjs/common": "$@nestjs/common",
+      "@nestjs/core": "$@nestjs/core"
+    }
+  },
   "dependencies": {
     "@fastify/static": "^10.1.3",
     "@nestjs/axios": "^12.0.0",

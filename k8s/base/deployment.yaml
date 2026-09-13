@@ -26,6 +26,12 @@ spec:
       terminationGracePeriodSeconds: 30
       securityContext:
         runAsNonRoot: true
+        # The image's USER is the named `node` account, not a numeric UID.
+        # Without an explicit runAsUser, kubelet can't verify runAsNonRoot
+        # without running the image, and refuses with
+        # CreateContainerConfigError instead. 1000 is `node`'s UID in the
+        # upstream node:*-slim images the Dockerfile builds from.
+        runAsUser: 1000
         seccompProfile:
           type: RuntimeDefault
       containers:

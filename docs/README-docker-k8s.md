@@ -52,7 +52,7 @@ Kustomize, so the manifests stay plain YAML with no templating.
 
 | Resource | Key settings |
 | --- | --- |
-| Deployment | Liveness probe → `/health/live`, readiness probe → `/health/ready`; `envFrom` the ConfigMap; `terminationGracePeriodSeconds: 30`; `preStop` sleeps 5s before SIGTERM so the pod clears the Service's endpoints first; hardened `securityContext` (non-root, no privilege escalation, read-only root filesystem, all capabilities dropped); no `replicas:` — the HPA owns that field |
+| Deployment | Liveness probe → `/health/live`, readiness probe → `/health/ready`; `envFrom` the ConfigMap; `terminationGracePeriodSeconds: 30`; `preStop` sleeps 5s before SIGTERM so the pod clears the Service's endpoints first; hardened `securityContext` (non-root, no privilege escalation, read-only root filesystem, all capabilities dropped) — pod-level `runAsUser: 1000` matches the Dockerfile's `USER node`, since kubelet can't verify `runAsNonRoot` against a named (non-numeric) image user on its own; no `replicas:` — the HPA owns that field |
 | Service | ClusterIP, port 80 → container port 3000 |
 | Ingress | Traefik; each overlay sets the host |
 | ConfigMap | Same keys as `.env.example` |
@@ -117,3 +117,18 @@ To see the manifests an overlay produces without applying them, run
 - **The prod overlay has never been applied.** It renders cleanly, but its
   registry and host are `REPLACE_WITH_REAL_*` placeholders (the tag gets
   promoted by CI once it's run on `master`).
+- **A pod stuck in `CreateContainerConfigError`** with `container has
+  runAsNonRoot and image has non-numeric user (node), cannot verify user is
+  non-root` means the Deployment's `runAsUser` doesn't match the image's
+  `USER`. Fixed as of this writing (`runAsUser: 1000`), but if the Dockerfile's
+  base image ever changes, re-check `node`'s UID stays 1000 (`docker run
+  --rm <image> id node`) or update `runAsUser` to match.
+- **`@nestjs/throttler@6.5.0` has no Nest-12-compatible release**, so a clean
+  `npm ci` (no `node_modules` yet, as in the `deps` build stage or a fresh
+  CI runner) fails with `ERESOLVE` once it can't find a peer-compatible
+  `@nestjs/common`/`@nestjs/core`. `package.json`'s `overrides` block tells
+  npm to treat throttler's peer declarations as satisfied by whatever
+  `@nestjs/common`/`@nestjs/core` version the root project resolves to,
+  instead of loosening resolution tree-wide with `--legacy-peer-deps`. Bumping
+  any `@nestjs/*` package requires re-running `npm install` to refresh
+  `package-lock.json` so the override stays in sync.
