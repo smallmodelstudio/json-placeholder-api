@@ -7,7 +7,7 @@ pipeline:
   properties:
     ci:
       codebase:
-        connectorRef: account.REPLACE_WITH_REAL_GITHUB_CONNECTOR
+        connectorRef: account.github_connector
         build: <+input>
   stages:
     - stage:
@@ -19,8 +19,9 @@ pipeline:
           platform:
             os: Linux
             arch: Amd64
+          # Local runner, same as ci.yaml — see docs/README-harness.md.
           runtime:
-            type: Cloud
+            type: Docker
             spec: {}
           execution:
             steps:

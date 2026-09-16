@@ -7,7 +7,7 @@ pipeline:
   properties:
     ci:
       codebase:
-        connectorRef: account.REPLACE_WITH_REAL_GITHUB_CONNECTOR
+        connectorRef: account.github_connector
         build: <+input>
   stages:
     - stage:
@@ -19,11 +19,13 @@ pipeline:
           platform:
             os: Linux
             arch: Amd64
-          # Cloud runner keeps this inside the free 2,000 credits/month tier.
-          # Swap to a self-hosted runner connector once
-          # that budget is a real constraint — the steps below don't change.
+          # Local runner (Harness Docker Delegate + Docker Runner installed
+          # on this machine, see docs/README-harness.md) — runs for free on
+          # unlimited self-hosted builds instead of spending Harness Cloud
+          # credits. Swap back to `type: Cloud` if the local runner isn't
+          # available; the steps below don't change either way.
           runtime:
-            type: Cloud
+            type: Docker
             spec: {}
           execution:
             steps:
@@ -81,8 +83,8 @@ pipeline:
                   name: Build and push image
                   identifier: build_and_push
                   spec:
-                    connectorRef: account.REPLACE_WITH_REAL_REGISTRY_CONNECTOR
-                    repo: REPLACE_WITH_REAL_REGISTRY/json-placeholder-api
+                    connectorRef: account.ghcr_connector
+                    repo: ghcr.io/smallmodelstudio/json-placeholder-api
                     dockerfile: Dockerfile
                     tags:
                       - <+codebase.shortCommitSha>
@@ -121,10 +123,10 @@ pipeline:
                       set -euo pipefail
                       for overlay in local prod; do
                         (cd "k8s/overlays/${overlay}" && npx kustomize edit set image \
-                          json-placeholder-api=REPLACE_WITH_REAL_REGISTRY/json-placeholder-api:<+codebase.shortCommitSha>)
+                          json-placeholder-api=ghcr.io/smallmodelstudio/json-placeholder-api:<+codebase.shortCommitSha>)
                       done
                       git config user.name "harness-ci"
-                      git config user.email "ci@REPLACE_WITH_REAL_DOMAIN"
+                      git config user.email "ci@harness-ci.local"
                       git add k8s/overlays/local/kustomization.yaml k8s/overlays/prod/kustomization.yaml
                       git commit -m "chore(deploy): promote json-placeholder-api to <+codebase.shortCommitSha>"
                       git push origin HEAD:<+codebase.branch>

@@ -12,7 +12,7 @@ service:
               store:
                 type: Github
                 spec:
-                  connectorRef: account.REPLACE_WITH_REAL_GITHUB_CONNECTOR
+                  connectorRef: account.github_connector
                   gitFetchType: Branch
                   branch: master
                   # One overlay path per environment (k8s/base +

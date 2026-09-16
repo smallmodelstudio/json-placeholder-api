@@ -11,7 +11,7 @@ infrastructureDefinition:
     # Delegate installed into this same k3d cluster (see docs/README-harness.md)
     # — Harness never needs inbound access to the cluster, only an
     # outbound-only Delegate already running inside it.
-    connectorRef: account.REPLACE_WITH_REAL_K8S_CONNECTOR
+    connectorRef: account.k3d_local_connector
     namespace: default
     releaseName: json-placeholder-api
   allowSimultaneousDeployments: false
