@@ -1,4 +1,6 @@
-import { PartialType } from '@nestjs/swagger';
-import { CreateCommentDto } from './create-comment.dto';
+import { createZodDto } from 'nestjs-zod';
+import { CreateCommentSchema } from './create-comment.dto';
 
-export class UpdateCommentDto extends PartialType(CreateCommentDto) {}
+export const UpdateCommentSchema = CreateCommentSchema.partial();
+
+export class UpdateCommentDto extends createZodDto(UpdateCommentSchema) {}

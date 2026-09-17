@@ -262,7 +262,7 @@ Fields: `id`, `userId`, `title`. Query: `userId`.
 
 ### 2.4 Comments
 
-- [ ] Done
+- [x] Done
 
 Fields: `id`, `postId`, `name`, `email` (`email`), `body`. Query: check the
 existing `query-comments.dto.ts` and keep its fields.
