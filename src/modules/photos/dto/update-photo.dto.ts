@@ -1,4 +1,6 @@
-import { PartialType } from '@nestjs/swagger';
-import { CreatePhotoDto } from './create-photo.dto';
+import { createZodDto } from 'nestjs-zod';
+import { CreatePhotoSchema } from './create-photo.dto';
 
-export class UpdatePhotoDto extends PartialType(CreatePhotoDto) {}
+export const UpdatePhotoSchema = CreatePhotoSchema.partial();
+
+export class UpdatePhotoDto extends createZodDto(UpdatePhotoSchema) {}

@@ -53,6 +53,10 @@ describe('Photos (e2e)', () => {
       const body = response.body as SuccessEnvelope<Photo[]>;
       expect(body.data).toEqual(photos);
     });
+
+    it('rejects a hex-looking albumId with 400', async () => {
+      await api(app).get('/photos?albumId=0x1').expect(400);
+    });
   });
 
   describe('GET /photos/:id', () => {
@@ -107,6 +111,43 @@ describe('Photos (e2e)', () => {
 
       const body = response.body as ErrorEnvelope;
       expect(body).toMatchObject({ statusCode: 400, error: 'Bad Request' });
+    });
+
+    it('rejects a url without a protocol with 400', async () => {
+      await api(app)
+        .post('/photos')
+        .send({
+          albumId: 1,
+          title: 't',
+          url: 'example.com/a.png',
+          thumbnailUrl: 'https://via.placeholder.com/150/1',
+        })
+        .expect(400);
+    });
+
+    it('rejects albumId sent as a string with 400', async () => {
+      await api(app)
+        .post('/photos')
+        .send({
+          albumId: '1',
+          title: 't',
+          url: 'https://via.placeholder.com/600/1',
+          thumbnailUrl: 'https://via.placeholder.com/150/1',
+        })
+        .expect(400);
+    });
+
+    it('rejects an unknown property with 400', async () => {
+      await api(app)
+        .post('/photos')
+        .send({
+          albumId: 1,
+          title: 't',
+          url: 'https://via.placeholder.com/600/1',
+          thumbnailUrl: 'https://via.placeholder.com/150/1',
+          extra: 'nope',
+        })
+        .expect(400);
     });
   });
 

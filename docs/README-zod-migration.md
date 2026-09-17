@@ -271,7 +271,7 @@ existing `query-comments.dto.ts` and keep its fields.
 
 ### 2.5 Photos
 
-- [ ] Done
+- [x] Done
 
 Fields: `id`, `albumId`, `title`, `url` and `thumbnailUrl` (`httpUrl`). Query:
 check the existing `query-photos.dto.ts` and keep its fields. Extra e2e test: a
