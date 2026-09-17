@@ -68,7 +68,7 @@ it.
 
 ### 0.1 Baseline
 
-- [ ] Done
+- [x] Done
 
 1. Create the branch `refactor/zod-validation` from `master`.
 2. Run `npm run lint:check`, `npm run typecheck`, `npm run test:cov` and
@@ -85,7 +85,7 @@ task has no commit unless something needed fixing.
 
 ### 0.2 Dependency spike — STOP
 
-- [ ] Done
+- [x] Done
 
 1. `npm install zod@^4 nestjs-zod`. If npm reports a peer-dependency conflict
    with Nest 12, add an `overrides` entry for `nestjs-zod` in `package.json`,
