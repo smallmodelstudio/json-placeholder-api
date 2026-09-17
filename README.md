@@ -7,8 +7,8 @@ envelope.
 The API is deliberately simple. The repo is a sandbox for learning NestJS and the
 platform around it: testing, containers, Kubernetes, CI/CD and telemetry.
 
-**Stack:** NestJS 12 · Fastify 5 · TypeScript 6 (type-checked by tsgo) · Vitest ·
-Docker · k3d + Kustomize · Harness · OpenTelemetry
+**Stack:** NestJS 12 · Fastify 5 · TypeScript 6 (type-checked by tsgo) · Zod ·
+Vitest · Docker · k3d + Kustomize · Harness · OpenTelemetry
 
 ## Key features
 

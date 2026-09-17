@@ -405,7 +405,7 @@ its query parameters, or a response losing its `$ref` to an entity schema.
 
 ### 5.1 `docs/README-architecture.md`
 
-- [ ] Done
+- [x] Done
 
 - **Layout block:** `entities/` becomes "response shapes (zod schemas)";
   `dto/` becomes "query, create and update inputs (zod schemas)"; `pipes/`
@@ -429,7 +429,7 @@ its query parameters, or a response losing its `$ref` to an entity schema.
 
 ### 5.2 Other docs
 
-- [ ] Done
+- [x] Done
 
 - `docs/README-getting-started.md`: check the env validation paragraph is still
   accurate.
