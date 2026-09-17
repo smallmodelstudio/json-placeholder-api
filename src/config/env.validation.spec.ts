@@ -71,4 +71,22 @@ describe('validate', () => {
       /Invalid environment variables/,
     );
   });
+
+  it('rejects a non-integer PORT', () => {
+    expect(() => validate({ ...validEnv, PORT: '1.5' })).toThrow(
+      /Invalid environment variables/,
+    );
+  });
+
+  it('rejects a non-http(s) UPSTREAM_BASE_URL', () => {
+    expect(() =>
+      validate({ ...validEnv, UPSTREAM_BASE_URL: 'ftp://example.com' }),
+    ).toThrow(/Invalid environment variables/);
+  });
+
+  it('preserves an undeclared environment variable', () => {
+    const result = validate({ ...validEnv, FOO: 'bar' });
+
+    expect(result).toMatchObject({ FOO: 'bar' });
+  });
 });

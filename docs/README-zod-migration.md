@@ -305,7 +305,7 @@ This phase doesn't depend on Phase 2 and can be done any time after 0.2.
 
 ### 3.1 Rewrite `env.validation.ts`
 
-- [ ] Done
+- [x] Done
 
 In `src/config/env.validation.ts`:
 
