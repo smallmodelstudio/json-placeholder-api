@@ -37,6 +37,10 @@ describe('Todos (e2e)', () => {
       const body = response.body as SuccessEnvelope<Todo[]>;
       expect(body.data).toEqual(todos);
     });
+
+    it('rejects a hex-looking userId with 400', async () => {
+      await api(app).get('/todos?userId=0x1').expect(400);
+    });
   });
 
   describe('GET /todos/:id', () => {
@@ -75,6 +79,27 @@ describe('Todos (e2e)', () => {
 
       const body = response.body as ErrorEnvelope;
       expect(body).toMatchObject({ statusCode: 400, error: 'Bad Request' });
+    });
+
+    it('rejects userId sent as a string with 400', async () => {
+      await api(app)
+        .post('/todos')
+        .send({ userId: '1', title: 't', completed: false })
+        .expect(400);
+    });
+
+    it('rejects an unknown property with 400', async () => {
+      await api(app)
+        .post('/todos')
+        .send({ userId: 1, title: 't', completed: false, extra: 'nope' })
+        .expect(400);
+    });
+
+    it('rejects completed sent as a string with 400', async () => {
+      await api(app)
+        .post('/todos')
+        .send({ userId: 1, title: 't', completed: 'false' })
+        .expect(400);
     });
   });
 

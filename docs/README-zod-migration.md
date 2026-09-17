@@ -245,7 +245,7 @@ the diff for review before continuing.
 
 ### 2.2 Todos
 
-- [ ] Done
+- [x] Done
 
 Fields: `id`, `userId`, `title`, `completed` (`z.boolean()`). Query: `userId`.
 Extra e2e test: `completed: "false"` in a `POST` body returns 400.

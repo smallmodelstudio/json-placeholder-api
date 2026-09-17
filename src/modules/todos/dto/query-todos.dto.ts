@@ -1,10 +1,9 @@
-import { Type } from 'class-transformer';
-import { IsInt, IsOptional, IsPositive } from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
+import { positiveIntQuery } from '../../../common/validation/fields';
 
-export class QueryTodosDto {
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @IsPositive()
-  userId?: number;
-}
+export const QueryTodosSchema = z.strictObject({
+  userId: positiveIntQuery.optional(),
+});
+
+export class QueryTodosDto extends createZodDto(QueryTodosSchema) {}
