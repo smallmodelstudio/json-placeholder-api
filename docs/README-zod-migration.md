@@ -170,7 +170,7 @@ a non-zod class with `failClosed: true` throws 500; the same with
 
 ### 1.3 Register both pipes
 
-- [ ] Done
+- [x] Done
 
 In `src/app.module.ts`:
 
