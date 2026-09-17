@@ -235,7 +235,7 @@ In `test/e2e/<x>.e2e.spec.ts`, next to the existing 400 cases:
 
 ### 2.1 Posts — STOP after this task
 
-- [ ] Done
+- [x] Done
 
 Fields: `id`, `userId` (positive int), `title`, `body` (non-empty strings).
 Query: `userId`.

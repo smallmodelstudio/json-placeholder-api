@@ -45,6 +45,10 @@ describe('Posts (e2e)', () => {
     it('rejects a non-numeric userId with 400', async () => {
       await api(app).get('/posts?userId=abc').expect(400);
     });
+
+    it('rejects a hex-looking userId with 400', async () => {
+      await api(app).get('/posts?userId=0x1').expect(400);
+    });
   });
 
   describe('GET /posts/:id', () => {
@@ -95,6 +99,13 @@ describe('Posts (e2e)', () => {
       await api(app)
         .post('/posts')
         .send({ title: 't', body: 'b', userId: 1, extra: 'nope' })
+        .expect(400);
+    });
+
+    it('rejects userId sent as a string with 400', async () => {
+      await api(app)
+        .post('/posts')
+        .send({ title: 't', body: 'b', userId: '1' })
         .expect(400);
     });
   });

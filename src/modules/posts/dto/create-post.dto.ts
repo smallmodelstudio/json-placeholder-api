@@ -1,17 +1,6 @@
-import { Type } from 'class-transformer';
-import { IsInt, IsNotEmpty, IsPositive, IsString } from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { PostSchema } from '../entities/post.entity';
 
-export class CreatePostDto {
-  @IsString()
-  @IsNotEmpty()
-  title!: string;
+export const CreatePostSchema = PostSchema.omit({ id: true });
 
-  @IsString()
-  @IsNotEmpty()
-  body!: string;
-
-  @Type(() => Number)
-  @IsInt()
-  @IsPositive()
-  userId!: number;
-}
+export class CreatePostDto extends createZodDto(CreatePostSchema) {}
