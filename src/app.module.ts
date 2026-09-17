@@ -1,17 +1,9 @@
-import {
-  ArgumentMetadata,
-  Injectable,
-  Logger,
-  Module,
-  OnApplicationShutdown,
-  ValidationPipe,
-} from '@nestjs/common';
+import { Logger, Module, OnApplicationShutdown } from '@nestjs/common';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
-import { isZodDto } from 'nestjs-zod/dto';
 import { AppConfig } from './config/config.types';
 import configuration from './config/configuration';
 import { Environment, validate } from './config/env.validation';
@@ -25,7 +17,6 @@ import { AlbumsModule } from './modules/albums/albums.module';
 import { PhotosModule } from './modules/photos/photos.module';
 import { HealthModule } from './health/health.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
-import { StrictNumberFormatPipe } from './common/pipes/strict-number-format.pipe';
 import { ZodValidationPipe } from './common/pipes/zod-validation.pipe';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { HttpCacheInterceptor } from './common/interceptors/http-cache.interceptor';
@@ -46,19 +37,6 @@ function isPinoPrettyAvailable(): boolean {
     return true;
   } catch {
     return false;
-  }
-}
-
-// Temporary, for the duration of the zod migration (removed in task 4.1 of
-// docs/README-zod-migration.md): `ValidationPipe`'s `forbidNonWhitelisted`
-// rejects every property of a zod DTO, since such a DTO carries no
-// class-validator decorators for it to recognise. Skipping zod DTOs here
-// keeps already-converted resources working alongside ones that still use
-// class-validator.
-@Injectable()
-class LegacyValidationPipe extends ValidationPipe {
-  protected override toValidate(metadata: ArgumentMetadata): boolean {
-    return !isZodDto(metadata.metatype) && super.toValidate(metadata);
   }
 }
 
@@ -160,29 +138,13 @@ class LegacyValidationPipe extends ValidationPipe {
   ],
   controllers: [],
   providers: [
-    // Multiple APP_PIPE providers run in this array's order (same
-    // reasoning as the APP_INTERCEPTOR ordering comment below), and that
-    // order matters here: StrictNumberFormatPipe has to see a route's raw
-    // param/query string before ValidationPipe's own `+value` coercion
-    // quietly turns "0x1" or "1e2" into a valid-looking number — see its
+    // Every request schema is a zod DTO now, so this is the only pipe left:
+    // it validates and transforms @Body()/@Query() arguments against their
+    // zod schema, and fails closed (500) if one has no zod DTO — see its
     // own doc comment for why.
-    { provide: APP_PIPE, useClass: StrictNumberFormatPipe },
-    // `failClosed: false` here: not every resource is converted to zod yet,
-    // so an argument with no zod DTO falls through to LegacyValidationPipe
-    // below instead of 500ing. Task 4.1 switches this to `failClosed: true`
-    // once LegacyValidationPipe is gone.
     {
       provide: APP_PIPE,
-      useValue: new ZodValidationPipe({ failClosed: false }),
-    },
-    {
-      provide: APP_PIPE,
-      useValue: new LegacyValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-        transformOptions: { enableImplicitConversion: true },
-      }),
+      useValue: new ZodValidationPipe({ failClosed: true }),
     },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_GUARD, useClass: ThrottlerGuard },

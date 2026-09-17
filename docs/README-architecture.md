@@ -39,7 +39,7 @@ ThrottlerGuard          429 when the client IP is over its limit
 TransformInterceptor    wrap the handler's result in { data, meta }
 HttpCacheInterceptor    serve cached GETs; a hit skips everything below
 TimeoutInterceptor      504 if the request outlives its budget
-ValidationPipe          validate and transform params, query and body
+ZodValidationPipe       validate and transform query and body against zod DTOs
 Controller → Service → UpstreamService → JSONPlaceholder
 
 Any exception at any step → AllExceptionsFilter → error envelope
@@ -115,7 +115,7 @@ base class.
 
 | Concern       | Behaviour                                                                                                                                                                                          | Where                                          |
 | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| Validation    | Unknown properties or query params return 400                                                                                                                                                      | `ValidationPipe` in `app.module.ts`            |
+| Validation    | Unknown properties or query params return 400; a `@Body()`/`@Query()` argument without a zod DTO returns 500                                                                                       | `zod-validation.pipe.ts`, `common/validation/` |
 | Caching       | GETs cached by URL for `CACHE_TTL_MS`; `@CacheTTL()` overrides per route; `X-Cache: HIT` or `MISS` header; `/health/*` never cached                                                                | `http-cache.interceptor.ts`                    |
 | Rate limiting | `THROTTLE_LIMIT` requests per `THROTTLE_TTL_MS` per IP (the real client IP only if `TRUST_PROXY=true`, see [Getting started](README-getting-started.md)); `/health/*` exempt via `@SkipThrottle()` | `ThrottlerGuard`                               |
 | Timeouts      | axios aborts each upstream attempt after `UPSTREAM_TIMEOUT_MS`; `TimeoutInterceptor` caps the whole request at `UPSTREAM_TIMEOUT_MS × (UPSTREAM_MAX_RETRIES + 2)`                                  | `upstream.module.ts`, `timeout.interceptor.ts` |

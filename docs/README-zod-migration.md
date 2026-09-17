@@ -344,7 +344,7 @@ Add spec cases to `env.validation.spec.ts`: `PORT: '1.5'` is rejected; a
 
 ### 4.1 Remove the old pipes and dependencies
 
-- [ ] Done
+- [x] Done
 
 1. In `src/app.module.ts`: delete `LegacyValidationPipe` and the
    `StrictNumberFormatPipe` provider. Register `ZodValidationPipe` with
