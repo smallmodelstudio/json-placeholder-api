@@ -1,9 +1,4 @@
-import {
-  Logger,
-  Module,
-  OnApplicationShutdown,
-  ValidationPipe,
-} from '@nestjs/common';
+import { Logger, Module, OnApplicationShutdown } from '@nestjs/common';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
@@ -22,7 +17,7 @@ import { AlbumsModule } from './modules/albums/albums.module';
 import { PhotosModule } from './modules/photos/photos.module';
 import { HealthModule } from './health/health.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
-import { StrictNumberFormatPipe } from './common/pipes/strict-number-format.pipe';
+import { ZodValidationPipe } from './common/pipes/zod-validation.pipe';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { HttpCacheInterceptor } from './common/interceptors/http-cache.interceptor';
 import { TimeoutInterceptor } from './common/interceptors/timeout.interceptor';
@@ -143,21 +138,13 @@ function isPinoPrettyAvailable(): boolean {
   ],
   controllers: [],
   providers: [
-    // Multiple APP_PIPE providers run in this array's order (same
-    // reasoning as the APP_INTERCEPTOR ordering comment below), and that
-    // order matters here: StrictNumberFormatPipe has to see a route's raw
-    // param/query string before ValidationPipe's own `+value` coercion
-    // quietly turns "0x1" or "1e2" into a valid-looking number — see its
+    // Every request schema is a zod DTO now, so this is the only pipe left:
+    // it validates and transforms @Body()/@Query() arguments against their
+    // zod schema, and fails closed (500) if one has no zod DTO — see its
     // own doc comment for why.
-    { provide: APP_PIPE, useClass: StrictNumberFormatPipe },
     {
       provide: APP_PIPE,
-      useValue: new ValidationPipe({
-        whitelist: true,
-        forbidNonWhitelisted: true,
-        transform: true,
-        transformOptions: { enableImplicitConversion: true },
-      }),
+      useValue: new ZodValidationPipe({ failClosed: true }),
     },
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_GUARD, useClass: ThrottlerGuard },

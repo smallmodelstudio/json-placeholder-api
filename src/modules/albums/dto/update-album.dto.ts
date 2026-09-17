@@ -1,4 +1,6 @@
-import { PartialType } from '@nestjs/swagger';
-import { CreateAlbumDto } from './create-album.dto';
+import { createZodDto } from 'nestjs-zod';
+import { CreateAlbumSchema } from './create-album.dto';
 
-export class UpdateAlbumDto extends PartialType(CreateAlbumDto) {}
+export const UpdateAlbumSchema = CreateAlbumSchema.partial();
+
+export class UpdateAlbumDto extends createZodDto(UpdateAlbumSchema) {}

@@ -13,15 +13,16 @@ src/
   config/                 env → typed AppConfig, plus startup validation
   upstream/               UpstreamService: the only code that makes HTTP calls
   modules/<resource>/     one module per resource
-    entities/             response shapes
-    dto/                  query, create and update inputs, validated
+    entities/             response shapes (zod schemas)
+    dto/                  query, create and update inputs (zod schemas)
     <resource>.controller.ts
     <resource>.service.ts
   common/
     hooks/                Fastify onRequest hook that sets the correlation ID
     interceptors/         envelope, cache, timeout
     filters/              AllExceptionsFilter: the error envelope
-    pipes/                ParsePositiveIntPipe for :id params
+    pipes/                ZodValidationPipe (global) and ParsePositiveIntPipe for :id params
+    validation/           shared zod field schemas (common/validation/fields.ts)
     decorators/           Swagger decorators for the response envelope
     exceptions/           UpstreamException
     metrics/              custom OpenTelemetry counters
@@ -39,7 +40,7 @@ ThrottlerGuard          429 when the client IP is over its limit
 TransformInterceptor    wrap the handler's result in { data, meta }
 HttpCacheInterceptor    serve cached GETs; a hit skips everything below
 TimeoutInterceptor      504 if the request outlives its budget
-ValidationPipe          validate and transform params, query and body
+ZodValidationPipe       validate and transform query and body against zod DTOs
 Controller → Service → UpstreamService → JSONPlaceholder
 
 Any exception at any step → AllExceptionsFilter → error envelope
@@ -113,15 +114,15 @@ base class.
 
 ## Cross-cutting concerns
 
-| Concern       | Behaviour                                                                                                                                                                                          | Where                                          |
-| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| Validation    | Unknown properties or query params return 400                                                                                                                                                      | `ValidationPipe` in `app.module.ts`            |
-| Caching       | GETs cached by URL for `CACHE_TTL_MS`; `@CacheTTL()` overrides per route; `X-Cache: HIT` or `MISS` header; `/health/*` never cached                                                                | `http-cache.interceptor.ts`                    |
-| Rate limiting | `THROTTLE_LIMIT` requests per `THROTTLE_TTL_MS` per IP (the real client IP only if `TRUST_PROXY=true`, see [Getting started](README-getting-started.md)); `/health/*` exempt via `@SkipThrottle()` | `ThrottlerGuard`                               |
-| Timeouts      | axios aborts each upstream attempt after `UPSTREAM_TIMEOUT_MS`; `TimeoutInterceptor` caps the whole request at `UPSTREAM_TIMEOUT_MS × (UPSTREAM_MAX_RETRIES + 2)`                                  | `upstream.module.ts`, `timeout.interceptor.ts` |
-| Health        | `/health/live` checks nothing, so it only fails if the process is down; `/health/ready` pings the upstream and returns 503 if it's unreachable                                                     | `health.controller.ts`                         |
-| Config        | `configuration.ts` maps env vars to `AppConfig`; read them with `ConfigService<AppConfig, true>` and `{ infer: true }`                                                                             | `src/config/`                                  |
-| API docs      | The Swagger CLI plugin generates schemas from DTO types; `@ApiEnvelopedResponse()` documents the success envelope, `@ApiCommonErrorResponses()` the 400/404/429/502/504 error envelope             | `nest-cli.json`, `common/decorators/`          |
+| Concern       | Behaviour                                                                                                                                                                                                                                                                           | Where                                                   |
+| ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Validation    | Unknown properties or query params return 400; body numbers must be JSON numbers; query integers must be plain digits; URLs must be http or https; a `@Body()`/`@Query()` argument without a zod DTO returns 500                                                                    | `zod-validation.pipe.ts`, `common/validation/fields.ts` |
+| Caching       | GETs cached by URL for `CACHE_TTL_MS`; `@CacheTTL()` overrides per route; `X-Cache: HIT` or `MISS` header; `/health/*` never cached                                                                                                                                                 | `http-cache.interceptor.ts`                             |
+| Rate limiting | `THROTTLE_LIMIT` requests per `THROTTLE_TTL_MS` per IP (the real client IP only if `TRUST_PROXY=true`, see [Getting started](README-getting-started.md)); `/health/*` exempt via `@SkipThrottle()`                                                                                  | `ThrottlerGuard`                                        |
+| Timeouts      | axios aborts each upstream attempt after `UPSTREAM_TIMEOUT_MS`; `TimeoutInterceptor` caps the whole request at `UPSTREAM_TIMEOUT_MS × (UPSTREAM_MAX_RETRIES + 2)`                                                                                                                   | `upstream.module.ts`, `timeout.interceptor.ts`          |
+| Health        | `/health/live` checks nothing, so it only fails if the process is down; `/health/ready` pings the upstream and returns 503 if it's unreachable                                                                                                                                      | `health.controller.ts`                                  |
+| Config        | `configuration.ts` maps env vars to `AppConfig`; read them with `ConfigService<AppConfig, true>` and `{ infer: true }`                                                                                                                                                              | `src/config/`                                           |
+| API docs      | `createZodDto` classes provide the request/response schemas; `cleanupOpenApiDoc()` in `main.ts` post-processes the generated document; no CLI plugin; `@ApiEnvelopedResponse()` documents the success envelope, `@ApiCommonErrorResponses()` the 400/404/429/502/504 error envelope | `main.ts`, `common/decorators/`                         |
 
 ## Gotchas
 
@@ -139,9 +140,12 @@ base class.
   anything else is replaced with a generated id, the same as a missing
   header, so a client can't smuggle log-line-breaking or oversized values
   into every log line and the response envelope for the request.
-- **An undeclared query param returns 400**, because of `forbidNonWhitelisted`.
-  Every new query param needs a field on its DTO.
+- **An undeclared query param returns 400**, because every request schema is a
+  `z.strictObject`. Every new query param needs a field on its DTO's schema.
 - **Fastify's `request.url` includes the query string.** The cache interceptor
   checks the route pattern (`request.routeOptions.url`) to exclude `/health`.
 - **List endpoints aren't paginated.** They return the full upstream list, and
   query DTOs only support filters such as `?userId=`.
+- **Build fields from `common/validation/fields.ts`, not `z.coerce`.**
+  `z.coerce.number()` accepts hex and exponential-notation strings, the same
+  looseness `positiveIntQuery` exists to reject.

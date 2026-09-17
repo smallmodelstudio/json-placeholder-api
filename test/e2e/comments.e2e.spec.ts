@@ -44,6 +44,10 @@ describe('Comments (e2e)', () => {
       const body = response.body as SuccessEnvelope<Comment[]>;
       expect(body.data).toEqual(comments);
     });
+
+    it('rejects a hex-looking postId with 400', async () => {
+      await api(app).get('/comments?postId=0x1').expect(400);
+    });
   });
 
   describe('GET /comments/:id', () => {
@@ -93,6 +97,26 @@ describe('Comments (e2e)', () => {
 
       const body = response.body as ErrorEnvelope;
       expect(body).toMatchObject({ statusCode: 400, error: 'Bad Request' });
+    });
+
+    it('rejects postId sent as a string with 400', async () => {
+      await api(app)
+        .post('/comments')
+        .send({ postId: '1', name: 'n', email: 'e@example.com', body: 'b' })
+        .expect(400);
+    });
+
+    it('rejects an unknown property with 400', async () => {
+      await api(app)
+        .post('/comments')
+        .send({
+          postId: 1,
+          name: 'n',
+          email: 'e@example.com',
+          body: 'b',
+          extra: 'nope',
+        })
+        .expect(400);
     });
   });
 

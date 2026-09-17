@@ -53,7 +53,7 @@ export class PostsController {
 
   // PUT is a full replace, so — unlike PATCH below — it requires every
   // field CreatePostDto requires, not just the ones being changed.
-  // Accepting UpdatePostDto's PartialType here would let a partial body
+  // Accepting UpdatePostDto's partial schema here would let a partial body
   // through PUT, silently leaving the upstream's other fields untouched
   // instead of replacing the resource as PUT's semantics promise.
   @Put(':id')

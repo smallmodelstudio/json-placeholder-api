@@ -1,6 +1,4 @@
-import 'reflect-metadata';
-import { plainToInstance } from 'class-transformer';
-import { IsEnum, IsInt, IsUrl, Max, Min, validateSync } from 'class-validator';
+import { z } from 'zod';
 
 export enum Environment {
   Development = 'development',
@@ -8,52 +6,31 @@ export enum Environment {
   Test = 'test',
 }
 
-class EnvironmentVariables {
-  @IsEnum(Environment)
-  NODE_ENV: Environment = Environment.Development;
+export const EnvironmentVariablesSchema = z.looseObject({
+  NODE_ENV: z.enum(Environment).default(Environment.Development),
+  PORT: z.coerce.number().int().min(0).max(65535).default(3000),
+  UPSTREAM_BASE_URL: z
+    .url({ protocol: /^https?$/ })
+    .default('https://jsonplaceholder.typicode.com'),
+  UPSTREAM_TIMEOUT_MS: z.coerce.number().int().min(1).default(5000),
+  UPSTREAM_MAX_RETRIES: z.coerce.number().int().min(0).default(2),
+  CACHE_TTL_MS: z.coerce.number().int().min(0).default(30000),
+  THROTTLE_TTL_MS: z.coerce.number().int().min(1).default(60000),
+  THROTTLE_LIMIT: z.coerce.number().int().min(1).default(20),
+});
 
-  @IsInt()
-  @Min(0)
-  @Max(65535)
-  PORT: number = 3000;
-
-  @IsUrl({ require_tld: false, require_protocol: true })
-  UPSTREAM_BASE_URL = 'https://jsonplaceholder.typicode.com';
-
-  @IsInt()
-  @Min(1)
-  UPSTREAM_TIMEOUT_MS: number = 5000;
-
-  @IsInt()
-  @Min(0)
-  UPSTREAM_MAX_RETRIES: number = 2;
-
-  @IsInt()
-  @Min(0)
-  CACHE_TTL_MS: number = 30000;
-
-  @IsInt()
-  @Min(1)
-  THROTTLE_TTL_MS: number = 60000;
-
-  @IsInt()
-  @Min(1)
-  THROTTLE_LIMIT: number = 20;
-}
+export type EnvironmentVariables = z.output<typeof EnvironmentVariablesSchema>;
 
 export function validate(
   config: Record<string, unknown>,
 ): EnvironmentVariables {
-  const validatedConfig = plainToInstance(EnvironmentVariables, config, {
-    enableImplicitConversion: true,
-  });
-  const errors = validateSync(validatedConfig, {
-    skipMissingProperties: false,
-  });
+  const result = EnvironmentVariablesSchema.safeParse(config);
 
-  if (errors.length > 0) {
-    throw new Error(`Invalid environment variables:\n${errors.toString()}`);
+  if (!result.success) {
+    throw new Error(
+      `Invalid environment variables:\n${z.prettifyError(result.error)}`,
+    );
   }
 
-  return validatedConfig;
+  return result.data;
 }

@@ -38,6 +38,10 @@ describe('Albums (e2e)', () => {
       const body = response.body as SuccessEnvelope<Album[]>;
       expect(body.data).toEqual(albums);
     });
+
+    it('rejects a hex-looking userId with 400', async () => {
+      await api(app).get('/albums?userId=0x1').expect(400);
+    });
   });
 
   describe('GET /albums/:id', () => {
@@ -76,6 +80,20 @@ describe('Albums (e2e)', () => {
 
       const body = response.body as ErrorEnvelope;
       expect(body).toMatchObject({ statusCode: 400, error: 'Bad Request' });
+    });
+
+    it('rejects userId sent as a string with 400', async () => {
+      await api(app)
+        .post('/albums')
+        .send({ userId: '1', title: 't' })
+        .expect(400);
+    });
+
+    it('rejects an unknown property with 400', async () => {
+      await api(app)
+        .post('/albums')
+        .send({ userId: 1, title: 't', extra: 'nope' })
+        .expect(400);
     });
   });
 

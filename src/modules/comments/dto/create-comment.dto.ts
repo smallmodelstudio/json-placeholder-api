@@ -1,26 +1,6 @@
-import { Type } from 'class-transformer';
-import {
-  IsEmail,
-  IsInt,
-  IsNotEmpty,
-  IsPositive,
-  IsString,
-} from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { CommentSchema } from '../entities/comment.entity';
 
-export class CreateCommentDto {
-  @Type(() => Number)
-  @IsInt()
-  @IsPositive()
-  postId!: number;
+export const CreateCommentSchema = CommentSchema.omit({ id: true });
 
-  @IsString()
-  @IsNotEmpty()
-  name!: string;
-
-  @IsEmail()
-  email!: string;
-
-  @IsString()
-  @IsNotEmpty()
-  body!: string;
-}
+export class CreateCommentDto extends createZodDto(CreateCommentSchema) {}

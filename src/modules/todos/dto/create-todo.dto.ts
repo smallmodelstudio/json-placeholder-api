@@ -1,22 +1,6 @@
-import { Type } from 'class-transformer';
-import {
-  IsBoolean,
-  IsInt,
-  IsNotEmpty,
-  IsPositive,
-  IsString,
-} from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { TodoSchema } from '../entities/todo.entity';
 
-export class CreateTodoDto {
-  @Type(() => Number)
-  @IsInt()
-  @IsPositive()
-  userId!: number;
+export const CreateTodoSchema = TodoSchema.omit({ id: true });
 
-  @IsString()
-  @IsNotEmpty()
-  title!: string;
-
-  @IsBoolean()
-  completed!: boolean;
-}
+export class CreateTodoDto extends createZodDto(CreateTodoSchema) {}

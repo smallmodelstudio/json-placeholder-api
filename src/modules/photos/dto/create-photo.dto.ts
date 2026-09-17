@@ -1,25 +1,6 @@
-import { Type } from 'class-transformer';
-import {
-  IsInt,
-  IsNotEmpty,
-  IsPositive,
-  IsString,
-  IsUrl,
-} from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { PhotoSchema } from '../entities/photo.entity';
 
-export class CreatePhotoDto {
-  @Type(() => Number)
-  @IsInt()
-  @IsPositive()
-  albumId!: number;
+export const CreatePhotoSchema = PhotoSchema.omit({ id: true });
 
-  @IsString()
-  @IsNotEmpty()
-  title!: string;
-
-  @IsUrl()
-  url!: string;
-
-  @IsUrl()
-  thumbnailUrl!: string;
-}
+export class CreatePhotoDto extends createZodDto(CreatePhotoSchema) {}
