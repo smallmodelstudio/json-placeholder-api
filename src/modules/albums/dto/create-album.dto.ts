@@ -1,13 +1,6 @@
-import { Type } from 'class-transformer';
-import { IsInt, IsNotEmpty, IsPositive, IsString } from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { AlbumSchema } from '../entities/album.entity';
 
-export class CreateAlbumDto {
-  @Type(() => Number)
-  @IsInt()
-  @IsPositive()
-  userId!: number;
+export const CreateAlbumSchema = AlbumSchema.omit({ id: true });
 
-  @IsString()
-  @IsNotEmpty()
-  title!: string;
-}
+export class CreateAlbumDto extends createZodDto(CreateAlbumSchema) {}

@@ -254,7 +254,7 @@ Extra e2e test: `completed: "false"` in a `POST` body returns 400.
 
 ### 2.3 Albums
 
-- [ ] Done
+- [x] Done
 
 Fields: `id`, `userId`, `title`. Query: `userId`.
 
