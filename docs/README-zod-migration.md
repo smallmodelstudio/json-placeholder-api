@@ -386,7 +386,7 @@ its query parameters, or a response losing its `$ref` to an entity schema.
 
 ### 4.3 Full verification
 
-- [ ] Done
+- [x] Done
 
 1. `npm run lint:check`, `npm run typecheck`, `npm run test:cov`,
    `npm run test:e2e`.
