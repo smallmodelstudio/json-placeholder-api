@@ -117,7 +117,7 @@ Nothing in this phase changes API behaviour.
 
 ### 1.1 Shared field schemas
 
-- [ ] Done
+- [x] Done
 
 Create `src/common/validation/fields.ts` and `fields.spec.ts` next to it.
 Export:
