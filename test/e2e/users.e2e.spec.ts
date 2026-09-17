@@ -138,6 +138,37 @@ describe('Users (e2e)', () => {
 
       await api(app).post('/users').send(invalidPayload).expect(400);
     });
+
+    it('rejects an out-of-range latitude with 400', async () => {
+      const invalidPayload = {
+        ...validUserPayload,
+        address: {
+          ...validUserPayload.address,
+          geo: { lat: '91', lng: '81.1496' },
+        },
+      };
+
+      await api(app).post('/users').send(invalidPayload).expect(400);
+    });
+
+    it('rejects an unknown key inside address.geo with 400', async () => {
+      const invalidPayload = {
+        ...validUserPayload,
+        address: {
+          ...validUserPayload.address,
+          geo: { ...validUserPayload.address.geo, altitude: '10' },
+        },
+      };
+
+      await api(app).post('/users').send(invalidPayload).expect(400);
+    });
+
+    it('rejects an unknown top-level property with 400', async () => {
+      await api(app)
+        .post('/users')
+        .send({ ...validUserPayload, extra: 'nope' })
+        .expect(400);
+    });
   });
 
   describe('PUT /users/:id', () => {

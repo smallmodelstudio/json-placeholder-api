@@ -1,12 +1,10 @@
-import { IsEmail, IsOptional, IsString, IsNotEmpty } from 'class-validator';
+import { createZodDto } from 'nestjs-zod';
+import { z } from 'zod';
+import { email, nonEmptyString } from '../../../common/validation/fields';
 
-export class QueryUsersDto {
-  @IsOptional()
-  @IsString()
-  @IsNotEmpty()
-  username?: string;
+export const QueryUsersSchema = z.strictObject({
+  username: nonEmptyString.optional(),
+  email: email.optional(),
+});
 
-  @IsOptional()
-  @IsEmail()
-  email?: string;
-}
+export class QueryUsersDto extends createZodDto(QueryUsersSchema) {}

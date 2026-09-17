@@ -281,7 +281,7 @@ check the existing `query-photos.dto.ts` and keep its fields. Extra e2e test: a
 
 ### 2.6 Users
 
-- [ ] Done
+- [x] Done
 
 - In `user.entity.ts`, define and export `GeoSchema` (`lat: latitudeString`,
   `lng: longitudeString`), `AddressSchema` (`street`, `suite`, `city`,
