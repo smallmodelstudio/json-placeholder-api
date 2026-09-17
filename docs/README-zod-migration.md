@@ -365,7 +365,7 @@ must still pass unchanged.
 
 ### 4.2 Swagger — STOP
 
-- [ ] Done
+- [x] Done
 
 1. Remove `"plugins": ["@nestjs/swagger"]` from `nest-cli.json`.
 2. In `src/main.ts`, pass the document through `cleanupOpenApiDoc()` before

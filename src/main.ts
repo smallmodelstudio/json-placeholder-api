@@ -3,6 +3,7 @@ import { NestFastifyApplication } from '@nestjs/platform-fastify';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { Logger } from 'nestjs-pino';
+import { cleanupOpenApiDoc } from 'nestjs-zod';
 import { AppModule } from './app.module';
 import { AppConfig } from './config/config.types';
 import { configureApp, createFastifyAdapter } from './bootstrap';
@@ -43,7 +44,9 @@ async function bootstrap() {
     .addTag('photos', 'Photos within an album')
     .addTag('health', 'Liveness (/health/live) and readiness (/health/ready)')
     .build();
-  const swaggerDocument = SwaggerModule.createDocument(app, swaggerConfig);
+  const swaggerDocument = cleanupOpenApiDoc(
+    SwaggerModule.createDocument(app, swaggerConfig),
+  );
   SwaggerModule.setup('docs', app, swaggerDocument);
 
   // Bind 0.0.0.0 (not just localhost) so the app is reachable from outside
