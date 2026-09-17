@@ -142,7 +142,7 @@ The spec covers each schema with valid and invalid inputs. Include at least:
 
 ### 1.2 `ZodValidationPipe`
 
-- [ ] Done
+- [x] Done
 
 Create `src/common/pipes/zod-validation.pipe.ts` and its spec.
 
